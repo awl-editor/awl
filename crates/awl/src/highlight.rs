@@ -57,14 +57,15 @@ fn highlight_color(idx: usize) -> Color {
         Some(&"comment")                                            => Color::rgb(106, 153,  85),
         Some(&"number") | Some(&"boolean")                         => Color::rgb(181, 206, 168),
         Some(&"function") | Some(&"function.call")
+        | Some(&"function.builtin")
         | Some(&"function.method") | Some(&"function.method.call") => Color::rgb(220, 220, 170),
-        Some(&"function.builtin")                                   => Color::rgb( 86, 156, 214),
         Some(&"function.macro")                                     => Color::rgb( 86, 156, 214),
         Some(&"type") | Some(&"type.definition") | Some(&"constructor")
         | Some(&"namespace") | Some(&"module")                     => Color::rgb( 78, 201, 176),
         Some(&"type.builtin")                                       => Color::rgb( 86, 156, 214),
         Some(&"constant")                                           => Color::rgb( 79, 193, 255),
         Some(&"constant.builtin") | Some(&"variable.builtin")      => Color::rgb( 86, 156, 214),
+        Some(&"variable")                                          => Color::rgb(156, 220, 254),
         Some(&"variable.parameter") | Some(&"attribute")
         | Some(&"property") | Some(&"variable.member")             => Color::rgb(156, 220, 254),
         Some(&"operator") | Some(&"punctuation.delimiter")
@@ -103,10 +104,19 @@ pub fn language_for_path(path: &Path) -> Option<&'static str> {
 
 // ── Combined query helpers ────────────────────────────────────────────────────
 
+const BOOL_QUERY: &str = "(true) @boolean\n(false) @boolean";
+
+static C_HIGHLIGHTS: OnceLock<String> = OnceLock::new();
+fn c_highlights() -> &'static str {
+    C_HIGHLIGHTS.get_or_init(|| {
+        format!("{}\n{}", tree_sitter_c::HIGHLIGHT_QUERY, BOOL_QUERY)
+    })
+}
+
 static CPP_HIGHLIGHTS: OnceLock<String> = OnceLock::new();
 fn cpp_highlights() -> &'static str {
     CPP_HIGHLIGHTS.get_or_init(|| {
-        format!("{}\n{}", tree_sitter_c::HIGHLIGHT_QUERY, tree_sitter_cpp::HIGHLIGHT_QUERY)
+        format!("{}\n{}\n{}", tree_sitter_c::HIGHLIGHT_QUERY, tree_sitter_cpp::HIGHLIGHT_QUERY, BOOL_QUERY)
     })
 }
 
@@ -117,122 +127,49 @@ fn jsx_highlights() -> &'static str {
     })
 }
 
-static CMAKE_HIGHLIGHTS: &str = r#"
-[
-  (bracket_comment)
-  (line_comment)
-] @comment
+static TS_HIGHLIGHTS: OnceLock<String> = OnceLock::new();
+fn ts_highlights() -> &'static str {
+    TS_HIGHLIGHTS.get_or_init(|| {
+        format!("{}\n{}", tree_sitter_javascript::HIGHLIGHT_QUERY, tree_sitter_typescript::HIGHLIGHTS_QUERY)
+    })
+}
 
-[
-  (quoted_argument)
-  (bracket_argument)
-] @string
+static TSX_HIGHLIGHTS: OnceLock<String> = OnceLock::new();
+fn tsx_highlights() -> &'static str {
+    TSX_HIGHLIGHTS.get_or_init(|| {
+        format!(
+            "{}\n{}\n{}",
+            tree_sitter_javascript::HIGHLIGHT_QUERY,
+            tree_sitter_javascript::JSX_HIGHLIGHT_QUERY,
+            tree_sitter_typescript::HIGHLIGHTS_QUERY,
+        )
+    })
+}
 
-(variable) @variable
-
-[
-  (if)
-  (elseif)
-  (else)
-  (endif)
-  (foreach)
-  (endforeach)
-  (while)
-  (endwhile)
-  (function)
-  (endfunction)
-  (macro)
-  (endmacro)
-] @keyword
-
-(normal_command
-  (identifier) @function.call)
-
-(function_command
-  (function)
-  (argument_list
-    .
-    (argument) @function
-    (argument)* @variable.parameter))
-
-(macro_command
-  (macro)
-  (argument_list
-    .
-    (argument) @function.macro
-    (argument)* @variable.parameter))
-
-[
-  "ENV"
-  "CACHE"
-] @module
-
-[
-  "("
-  ")"
-] @punctuation.bracket
-
-((unquoted_argument) @boolean
-  (#match? @boolean "^([Tt][Rr][Uu][Ee]|[Ff][Aa][Ll][Ss][Ee]|[Oo][Nn]|[Oo][Ff][Ff]|[Yy][Ee][Ss]|[Nn][Oo]|1|0)$"))
-
-(if_command
-  (if)
-  (argument_list
-    (argument) @keyword.operator)
-  (#any-of? @keyword.operator
-    "NOT" "AND" "OR" "COMMAND" "POLICY" "TARGET" "TEST" "DEFINED"
-    "IN_LIST" "EXISTS" "IS_NEWER_THAN" "IS_DIRECTORY" "IS_SYMLINK" "IS_ABSOLUTE"
-    "MATCHES" "LESS" "GREATER" "EQUAL" "LESS_EQUAL" "GREATER_EQUAL"
-    "STRLESS" "STRGREATER" "STREQUAL" "STRLESS_EQUAL" "STRGREATER_EQUAL"
-    "VERSION_LESS" "VERSION_GREATER" "VERSION_EQUAL" "VERSION_LESS_EQUAL" "VERSION_GREATER_EQUAL"))
-
-(elseif_command
-  (elseif)
-  (argument_list
-    (argument) @keyword.operator)
-  (#any-of? @keyword.operator
-    "NOT" "AND" "OR" "COMMAND" "POLICY" "TARGET" "TEST" "DEFINED"
-    "IN_LIST" "EXISTS" "IS_NEWER_THAN" "IS_DIRECTORY" "IS_SYMLINK" "IS_ABSOLUTE"
-    "MATCHES" "LESS" "GREATER" "EQUAL" "LESS_EQUAL" "GREATER_EQUAL"
-    "STRLESS" "STRGREATER" "STREQUAL" "STRLESS_EQUAL" "STRGREATER_EQUAL"
-    "VERSION_LESS" "VERSION_GREATER" "VERSION_EQUAL" "VERSION_LESS_EQUAL" "VERSION_GREATER_EQUAL"))
-
-(normal_command
-  (identifier) @_fn
-  (#match? @_fn "^[sS][eE][tT]$")
-  (argument_list
-    .
-    (argument) @variable))
-
-(normal_command
-  (identifier) @_fn
-  (#match? @_fn "^[sS][eE][tT]$")
-  (argument_list
-    .
-    (argument)
-    (argument) @keyword.modifier
-    .
-    (argument) @type
-    (#any-of? @keyword.modifier "CACHE")
-    (#any-of? @type "BOOL" "FILEPATH" "PATH" "STRING" "INTERNAL")))
-
-((unquoted_argument) @constant
-  (#match? @constant "^[A-Z][A-Z0-9_]+$"))
-"#;
+// The package uses @_function (auxiliary, non-highlighting) for set/list/unset
+// command names, which suppresses all other captures for those identifiers.
+// Replace with @function.builtin so they render yellow like other cmake builtins.
+// The #match? predicates that reference @_function still work after the rename.
+static CMAKE_HIGHLIGHTS: OnceLock<String> = OnceLock::new();
+fn cmake_highlights() -> &'static str {
+    CMAKE_HIGHLIGHTS.get_or_init(|| {
+        tree_sitter_cmake::HIGHLIGHTS_QUERY.replace("@_function", "@function.builtin")
+    })
+}
 
 // ── Grammar registry ──────────────────────────────────────────────────────────
 
 fn grammar_for(lang: &str) -> Option<(Language, &'static str)> {
     match lang {
-        "c"          => Some((tree_sitter_c::LANGUAGE.into(),                        tree_sitter_c::HIGHLIGHT_QUERY)),
+        "c"          => Some((tree_sitter_c::LANGUAGE.into(),                        c_highlights())),
         "cpp"        => Some((tree_sitter_cpp::LANGUAGE.into(),                      cpp_highlights())),
         "rust"       => Some((tree_sitter_rust::LANGUAGE.into(),                     tree_sitter_rust::HIGHLIGHTS_QUERY)),
         "javascript" => Some((tree_sitter_javascript::LANGUAGE.into(),               tree_sitter_javascript::HIGHLIGHT_QUERY)),
         "jsx"        => Some((tree_sitter_javascript::LANGUAGE.into(),               jsx_highlights())),
-        "typescript" => Some((tree_sitter_typescript::LANGUAGE_TYPESCRIPT.into(),    tree_sitter_typescript::HIGHLIGHTS_QUERY)),
-        "tsx"        => Some((tree_sitter_typescript::LANGUAGE_TSX.into(),           tree_sitter_typescript::HIGHLIGHTS_QUERY)),
+        "typescript" => Some((tree_sitter_typescript::LANGUAGE_TYPESCRIPT.into(),    ts_highlights())),
+        "tsx"        => Some((tree_sitter_typescript::LANGUAGE_TSX.into(),           tsx_highlights())),
         "css"        => Some((tree_sitter_css::LANGUAGE.into(),                      tree_sitter_css::HIGHLIGHTS_QUERY)),
-        "cmake"      => Some((tree_sitter_cmake::LANGUAGE.into(),                    CMAKE_HIGHLIGHTS)),
+        "cmake"      => Some((tree_sitter_cmake::LANGUAGE.into(),                    cmake_highlights())),
         "json"       => Some((tree_sitter_json::LANGUAGE.into(),                     tree_sitter_json::HIGHLIGHTS_QUERY)),
         "ini"        => Some((tree_sitter_ini::LANGUAGE.into(),                      tree_sitter_ini::HIGHLIGHTS_QUERY)),
         _            => None,

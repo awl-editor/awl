@@ -174,6 +174,7 @@ pub enum PromptAction { NewFile, NewFolder, Rename, RenameSymbol }
 pub struct InputPrompt {
     pub title: &'static str,
     pub value: String,
+    pub original: String,
     pub action: PromptAction,
     pub context: PathBuf,
     pub lsp_pos: Option<(u32, u32)>, // (line, col) for RenameSymbol
@@ -181,19 +182,19 @@ pub struct InputPrompt {
 
 impl InputPrompt {
     pub fn new_file(dir: PathBuf) -> Self {
-        Self { title: "New File", value: String::new(), action: PromptAction::NewFile, context: dir, lsp_pos: None }
+        Self { title: "New File", value: String::new(), original: String::new(), action: PromptAction::NewFile, context: dir, lsp_pos: None }
     }
     pub fn new_folder(dir: PathBuf) -> Self {
-        Self { title: "New Folder", value: String::new(), action: PromptAction::NewFolder, context: dir, lsp_pos: None }
+        Self { title: "New Folder", value: String::new(), original: String::new(), action: PromptAction::NewFolder, context: dir, lsp_pos: None }
     }
     pub fn rename(path: PathBuf) -> Self {
         let name = path.file_name()
             .map(|n| n.to_string_lossy().into_owned())
             .unwrap_or_default();
-        Self { title: "Rename", value: name, action: PromptAction::Rename, context: path, lsp_pos: None }
+        Self { title: "Rename", value: name.clone(), original: name, action: PromptAction::Rename, context: path, lsp_pos: None }
     }
     pub fn rename_symbol(path: PathBuf, current: String, line: u32, col: u32) -> Self {
-        Self { title: "Rename Symbol", value: current, action: PromptAction::RenameSymbol, context: path, lsp_pos: Some((line, col)) }
+        Self { title: "Rename Symbol", value: current.clone(), original: current, action: PromptAction::RenameSymbol, context: path, lsp_pos: Some((line, col)) }
     }
 }
 
@@ -298,6 +299,47 @@ impl EditorContextMenu {
         let idx = (my - self.y - 1) as usize;
         self.items.get(idx).and_then(|i| if i.is_sep() { None } else { Some(idx) })
     }
+}
+
+// ── Confirm dialog ────────────────────────────────────────────────────────────
+
+/// A modal yes/no confirmation dialog. Currently used for delete confirmations.
+pub struct ConfirmDialog {
+    pub paths: Vec<PathBuf>,
+}
+
+impl ConfirmDialog {
+    pub fn delete(paths: Vec<PathBuf>) -> Self {
+        Self { paths }
+    }
+}
+
+// ── Unsaved-changes dialog ─────────────────────────────────────────────────────
+
+pub enum UnsavedAction {
+    CloseTab(usize),
+    Quit,
+}
+
+pub struct UnsavedDialog {
+    pub paths: Vec<PathBuf>,
+    pub action: UnsavedAction,
+}
+
+impl UnsavedDialog {
+    pub fn close_tab(idx: usize, path: PathBuf) -> Self {
+        Self { paths: vec![path], action: UnsavedAction::CloseTab(idx) }
+    }
+    pub fn quit(paths: Vec<PathBuf>) -> Self {
+        Self { paths, action: UnsavedAction::Quit }
+    }
+}
+
+// ── Swap-file recovery dialog ──────────────────────────────────────────────────
+
+pub struct RecoveryDialog {
+    pub path: PathBuf,
+    pub swap_content: String,
 }
 
 // ── Completion menu ───────────────────────────────────────────────────────────

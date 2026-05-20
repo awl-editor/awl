@@ -209,6 +209,9 @@ fn hunk_new_start(line: &str) -> Option<usize> {
 fn propagate_to_dirs(mut map: HashMap<PathBuf, Status>, git_root: &Path) -> HashMap<PathBuf, Status> {
     let files: Vec<(PathBuf, Status)> = map.iter().map(|(p, &s)| (p.clone(), s)).collect();
     for (path, status) in files {
+        // Ignored status must not bubble up — a directory that merely contains
+        // ignored build artifacts should not itself appear as ignored.
+        if status == Status::Ignored { continue; }
         let mut current = path.parent();
         while let Some(dir) = current {
             if dir == git_root || !dir.starts_with(git_root) { break; }

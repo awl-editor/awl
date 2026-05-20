@@ -1,8 +1,9 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 use std::time::{Instant, SystemTime, UNIX_EPOCH};
 
 #[derive(Clone, Copy, Debug, PartialEq)]
+#[allow(dead_code)]
 pub enum StatusLevel { Log, Warn, Error }
 
 use editor::Buffer;
@@ -62,6 +63,14 @@ pub struct App {
     pub pending_code_actions: Vec<lsp::CodeActionItem>,
     pub completion_menu: Option<crate::popup::CompletionMenu>,
     pub git_line_diff: HashMap<PathBuf, HashMap<usize, git::DiffKind>>,
+    pub explorer_selection: HashSet<usize>,
+    pub explorer_anchor: Option<usize>,
+    pub confirm_dialog: Option<crate::popup::ConfirmDialog>,
+    pub pending_rename_label: Option<String>,
+    pub unsaved_dialog: Option<crate::popup::UnsavedDialog>,
+    pub recovery_dialog: Option<crate::popup::RecoveryDialog>,
+    pub last_swap_tick: Instant,
+    pub swap_versions: HashMap<PathBuf, i32>,
 }
 
 impl App {
@@ -105,6 +114,14 @@ impl App {
             pending_code_actions: Vec::new(),
             completion_menu: None,
             git_line_diff: HashMap::new(),
+            explorer_selection: HashSet::new(),
+            explorer_anchor: None,
+            confirm_dialog: None,
+            pending_rename_label: None,
+            unsaved_dialog: None,
+            recovery_dialog: None,
+            last_swap_tick: Instant::now(),
+            swap_versions: HashMap::new(),
         }
     }
 
@@ -121,6 +138,30 @@ impl App {
         } else {
             None
         };
+    }
+
+    /// Write swap files for modified buffers whose content has changed since the last write.
+    /// Called every frame; does real work only every 10 seconds.
+    pub fn tick_swaps(&mut self) {
+        if self.last_swap_tick.elapsed().as_secs() < 10 {
+            return;
+        }
+        self.last_swap_tick = Instant::now();
+        let to_write: Vec<(PathBuf, String, i32)> = self.tabs.iter()
+            .filter(|t| !t.virtual_tab && t.modified)
+            .filter_map(|t| {
+                let last = self.swap_versions.get(&t.path).copied().unwrap_or(0);
+                if t.lsp_version != last {
+                    Some((t.path.clone(), t.rope.to_string(), t.lsp_version))
+                } else {
+                    None
+                }
+            })
+            .collect();
+        for (path, content, version) in to_write {
+            crate::swap::write(&path, &content);
+            self.swap_versions.insert(path, version);
+        }
     }
 
     /// Called each frame; returns true if the message expired and display needs a refresh.
@@ -168,6 +209,8 @@ impl App {
         }
 
         // Select and scroll to the target entry
+        self.explorer_selection.clear();
+        self.explorer_anchor = None;
         if let Some(idx) = self.tree.iter().position(|e| e.path == path) {
             self.explorer_selected = idx;
             if idx < self.explorer_scroll {
@@ -217,6 +260,12 @@ impl App {
             let text = buf.rope.to_string();
             self.lsp.open(&buf.path, &text);
             self.refresh_file_diff(&buf.path.clone());
+            if let Some(swap_content) = crate::swap::read_if_different(&buf.path) {
+                self.recovery_dialog = Some(crate::popup::RecoveryDialog {
+                    path: buf.path.clone(),
+                    swap_content,
+                });
+            }
             self.tabs.push(buf);
             self.active_tab = self.tabs.len() - 1;
             self.editor_focused = false;

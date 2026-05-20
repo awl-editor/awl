@@ -19,6 +19,7 @@ mod git;
 mod highlight;
 mod icons;
 mod popup;
+mod swap;
 
 use app::{App, StatusLevel};
 use lsp::LspDiagnostic;
@@ -82,6 +83,7 @@ fn main() -> io::Result<()> {
         Some(p) => p.clone(),
         None => env::current_dir().unwrap_or_else(|_| PathBuf::from(".")),
     };
+    let root = root.canonicalize().unwrap_or(root);
 
     let stdout = io::stdout();
     let raw = stdout.lock().into_raw_mode()?;
@@ -91,7 +93,7 @@ fn main() -> io::Result<()> {
     write!(out, "\x1b[?25l\x1b[2J\x1b[?1003h")?;
     out.flush()?;
 
-    let (w, h) = termion::terminal_size()?;
+    let (mut w, mut h) = termion::terminal_size()?;
     let mut app = App::new(root);
 
     if let Some(p) = env::args().nth(1).map(PathBuf::from) {
@@ -206,8 +208,17 @@ fn main() -> io::Result<()> {
                     screen_x,
                     screen_y,
                 } => {
-                    app.hover_screen_pos = (screen_x, screen_y);
-                    app.lsp.hover(&path, row, col);
+                    let any_popup = app.editor_context_menu.is_some()
+                        || app.context_menu.is_some()
+                        || app.lsp_menu.is_some()
+                        || app.prompt.is_some()
+                        || app.confirm_dialog.is_some()
+                        || app.unsaved_dialog.is_some()
+                        || app.recovery_dialog.is_some();
+                    if !any_popup {
+                        app.hover_screen_pos = (screen_x, screen_y);
+                        app.lsp.hover(&path, row, col);
+                    }
                     dirty = false;
                     is_motion = true;
                     None
@@ -216,7 +227,95 @@ fn main() -> io::Result<()> {
             };
 
             if let Some(event) = event_opt {
-                if app.prompt.is_some() {
+                if app.unsaved_dialog.is_some() {
+                    consumed = true;
+                    match &event {
+                        Event::Key(Key::Char('s')) | Event::Key(Key::Char('S')) => {
+                            let dlg = app.unsaved_dialog.take().unwrap();
+                            match dlg.action {
+                                popup::UnsavedAction::Quit => {
+                                    for tab in &mut app.tabs {
+                                        if !tab.virtual_tab && tab.modified {
+                                            let _ = tab.save();
+                                        }
+                                    }
+                                    for path in &dlg.paths { swap::remove(path); }
+                                    quit = true;
+                                }
+                                popup::UnsavedAction::CloseTab(idx) => {
+                                    let save_result = app.tabs.get_mut(idx).and_then(|t| {
+                                        if !t.virtual_tab && t.modified {
+                                            let path = t.path.clone();
+                                            let text = t.rope.to_string();
+                                            let _ = t.save();
+                                            Some((path, text))
+                                        } else {
+                                            None
+                                        }
+                                    });
+                                    if let Some((path, text)) = save_result {
+                                        swap::remove(&path);
+                                        app.lsp.save(&path, &text);
+                                        app.refresh_file_diff(&path);
+                                    }
+                                    app.close_tab(idx);
+                                    app.refresh_git();
+                                }
+                            }
+                        }
+                        Event::Key(Key::Char('d')) | Event::Key(Key::Char('D')) => {
+                            let dlg = app.unsaved_dialog.take().unwrap();
+                            match dlg.action {
+                                popup::UnsavedAction::Quit => {
+                                    quit = true;
+                                }
+                                popup::UnsavedAction::CloseTab(idx) => {
+                                    if let Some(tab) = app.tabs.get(idx) {
+                                        swap::remove(&tab.path.clone());
+                                    }
+                                    app.close_tab(idx);
+                                }
+                            }
+                        }
+                        Event::Key(Key::Esc) | Event::Key(Key::Char('n')) | Event::Key(Key::Char('N')) => {
+                            app.unsaved_dialog = None;
+                        }
+                        _ => { dirty = false; }
+                    }
+                } else if app.recovery_dialog.is_some() {
+                    consumed = true;
+                    match &event {
+                        Event::Key(Key::Char('r')) | Event::Key(Key::Char('R')) | Event::Key(Key::Char('\n')) => {
+                            let dlg = app.recovery_dialog.take().unwrap();
+                            if let Some(tab) = app.tabs.iter_mut().find(|t| t.path == dlg.path) {
+                                tab.rope = ropey::Rope::from_str(&dlg.swap_content);
+                                tab.modified = true;
+                                tab.lsp_version += 1;
+                                tab.cursor_row = 0;
+                                tab.cursor_col = 0;
+                                tab.scroll_row = 0;
+                                tab.scroll_col = 0;
+                            }
+                        }
+                        Event::Key(Key::Char('k')) | Event::Key(Key::Char('K')) | Event::Key(Key::Esc) => {
+                            let dlg = app.recovery_dialog.take().unwrap();
+                            swap::remove(&dlg.path);
+                        }
+                        _ => { dirty = false; }
+                    }
+                } else if app.confirm_dialog.is_some() {
+                    consumed = true;
+                    match &event {
+                        Event::Key(Key::Char('\n')) | Event::Key(Key::Char('y')) | Event::Key(Key::Char('Y')) => {
+                            let paths = app.confirm_dialog.take().map(|d| d.paths).unwrap_or_default();
+                            do_delete_files(&mut app, paths);
+                        }
+                        Event::Key(Key::Esc) | Event::Key(Key::Char('n')) | Event::Key(Key::Char('N')) => {
+                            app.confirm_dialog = None;
+                        }
+                        _ => { dirty = false; }
+                    }
+                } else if app.prompt.is_some() {
                     consumed = true;
                     match &event {
                         Event::Key(Key::Esc) => {
@@ -281,7 +380,10 @@ fn main() -> io::Result<()> {
                             app.completion_menu = None;
                             // Let the event fall through (consumed stays false).
                         }
-                        _ => {}
+                        _ => {
+                            // Mouse clicks, scroll, etc. — dismiss and let event fall through.
+                            app.completion_menu = None;
+                        }
                     }
                 } else if app.editor_context_menu.is_some() {
                     consumed = true;
@@ -289,10 +391,14 @@ fn main() -> io::Result<()> {
                         Event::Key(Key::Esc) => { app.editor_context_menu = None; }
                         Event::Mouse(MouseEvent::Press(MouseButton::Left, mx, my)) => {
                             let (x, y) = (mx - 1, my - 1);
-                            let action = app.editor_context_menu.as_ref()
-                                .and_then(|m| m.hit(x, y).and_then(|i| m.items[i].action));
+                            let click_info = app.editor_context_menu.as_ref().and_then(|m| {
+                                m.hit(x, y).and_then(|i| m.items[i].action)
+                                    .map(|a| (a, m.buf_row, m.buf_col))
+                            });
                             app.editor_context_menu = None;
-                            if let Some(a) = action { execute_editor_menu_action(&mut app, a, eh, ew); }
+                            if let Some((a, row, col)) = click_info {
+                                execute_editor_menu_action(&mut app, a, row, col, eh, ew);
+                            }
                         }
                         Event::Mouse(MouseEvent::Hold(mx, my)) => {
                             let (x, y) = (mx - 1, my - 1);
@@ -413,6 +519,97 @@ fn main() -> io::Result<()> {
                     }
                 }
 
+                // ── Explorer keyboard navigation ──────────────────────────────
+                // Intercept arrow/enter keys when the explorer is focused so they
+                // don't fall through and re-focus the editor.
+                if !consumed && !app.editor_focused && app.root_expanded {
+                    let visible = layout.explorer.height.saturating_sub(1) as usize;
+                    let exp_max = app.tree.len().saturating_sub(1);
+                    let explorer_key = match &event {
+                        Event::Key(Key::Up) | Event::Key(Key::Down)
+                        | Event::Key(Key::ShiftUp) | Event::Key(Key::ShiftDown)
+                        | Event::Key(Key::Char('\n')) | Event::Key(Key::Right) => true,
+                        _ => false,
+                    };
+                    if explorer_key {
+                        match &event {
+                            Event::Key(Key::Up) => {
+                                if app.explorer_selected > 0 {
+                                    app.explorer_selected -= 1;
+                                    app.explorer_selection.clear();
+                                    app.explorer_selection.insert(app.explorer_selected);
+                                    app.explorer_anchor = Some(app.explorer_selected);
+                                    if app.explorer_selected < app.explorer_scroll {
+                                        app.explorer_scroll = app.explorer_selected;
+                                    }
+                                }
+                            }
+                            Event::Key(Key::Down) => {
+                                if app.explorer_selected < exp_max {
+                                    app.explorer_selected += 1;
+                                    app.explorer_selection.clear();
+                                    app.explorer_selection.insert(app.explorer_selected);
+                                    app.explorer_anchor = Some(app.explorer_selected);
+                                    let bot = app.explorer_scroll + visible;
+                                    if app.explorer_selected >= bot {
+                                        app.explorer_scroll = app.explorer_selected + 1 - visible;
+                                    }
+                                }
+                            }
+                            Event::Key(Key::ShiftUp) => {
+                                if app.explorer_selected > 0 {
+                                    if app.explorer_anchor.is_none() {
+                                        app.explorer_anchor = Some(app.explorer_selected);
+                                    }
+                                    app.explorer_selected -= 1;
+                                    let anchor = app.explorer_anchor.unwrap();
+                                    let (lo, hi) = if anchor <= app.explorer_selected { (anchor, app.explorer_selected) } else { (app.explorer_selected, anchor) };
+                                    app.explorer_selection.clear();
+                                    for j in lo..=hi { app.explorer_selection.insert(j); }
+                                    if app.explorer_selected < app.explorer_scroll {
+                                        app.explorer_scroll = app.explorer_selected;
+                                    }
+                                }
+                            }
+                            Event::Key(Key::ShiftDown) => {
+                                if app.explorer_selected < exp_max {
+                                    if app.explorer_anchor.is_none() {
+                                        app.explorer_anchor = Some(app.explorer_selected);
+                                    }
+                                    app.explorer_selected += 1;
+                                    let anchor = app.explorer_anchor.unwrap();
+                                    let (lo, hi) = if anchor <= app.explorer_selected { (anchor, app.explorer_selected) } else { (app.explorer_selected, anchor) };
+                                    app.explorer_selection.clear();
+                                    for j in lo..=hi { app.explorer_selection.insert(j); }
+                                    let bot = app.explorer_scroll + visible;
+                                    if app.explorer_selected >= bot {
+                                        app.explorer_scroll = app.explorer_selected + 1 - visible;
+                                    }
+                                }
+                            }
+                            Event::Key(Key::Char('\n')) | Event::Key(Key::Right) => {
+                                let i = app.explorer_selected;
+                                if i < app.tree.len() {
+                                    if app.tree[i].is_dir {
+                                        filetree::toggle(&mut app.tree, i);
+                                        let new_max = app.tree.len().saturating_sub(1);
+                                        if app.explorer_selected > new_max { app.explorer_selected = new_max; }
+                                        app.explorer_selection.clear();
+                                        app.explorer_selection.insert(app.explorer_selected);
+                                    } else {
+                                        let path = app.tree[i].path.clone();
+                                        app.push_history();
+                                        app.open_file(path);
+                                        app.editor_focused = true;
+                                    }
+                                }
+                            }
+                            _ => {}
+                        }
+                        consumed = true;
+                    }
+                }
+
                 if !consumed && matches!(&event, Event::Key(_)) {
                     app.editor_focused = true;
                     app.hover_card = None;
@@ -422,16 +619,34 @@ fn main() -> io::Result<()> {
 
                 if !consumed {
                     match event {
-                        Event::Key(Key::Ctrl('q')) => quit = true,
+                        Event::Key(Key::Ctrl('q')) => {
+                            let modified: Vec<PathBuf> = app.tabs.iter()
+                                .filter(|t| !t.virtual_tab && t.modified)
+                                .map(|t| t.path.clone())
+                                .collect();
+                            if modified.is_empty() {
+                                quit = true;
+                            } else {
+                                app.unsaved_dialog = Some(popup::UnsavedDialog::quit(modified));
+                            }
+                        }
                         Event::Key(Key::Ctrl('w')) => {
                             let idx = app.active_tab;
-                            app.close_tab(idx);
+                            if app.tabs.get(idx).map(|t| !t.virtual_tab && t.modified).unwrap_or(false) {
+                                let path = app.tabs[idx].path.clone();
+                                app.unsaved_dialog = Some(popup::UnsavedDialog::close_tab(idx, path));
+                            } else {
+                                app.close_tab(idx);
+                            }
                         }
 
                         Event::Key(Key::Ctrl('z')) => {
                             if let Some(b) = app.current_mut() {
-                                b.undo();
+                                let label = b.undo();
                                 b.update_scroll(eh, ew);
+                                if let Some(lbl) = label {
+                                    app.set_status(format!("undid {}", lbl), 3000, StatusLevel::Log);
+                                }
                             }
                         }
                         Event::Key(Key::Ctrl('y')) => {
@@ -453,6 +668,7 @@ fn main() -> io::Result<()> {
                                 }
                             });
                             if let Some((path, text)) = saved {
+                                swap::remove(&path);
                                 app.lsp.save(&path, &text);
                                 app.refresh_file_diff(&path);
                             }
@@ -933,6 +1149,40 @@ fn main() -> io::Result<()> {
                                             }
                                             nav_event = true;
                                         }
+                                        // Ctrl+click (btn=16) or Shift+click (btn=4).
+                                        // Shift+click only arrives here on terminals that
+                                        // forward it via SGR (kitty, foot, recent alacritty).
+                                        // Most other terminals intercept Shift for text
+                                        // selection; use Shift+Up/Down as the fallback.
+                                        b if b & 3 == 0 && (b & 16 != 0 || b & 4 != 0) && b & 32 == 0 => {
+                                            if let Some((_, mx, my)) = parse_sgr_press(bytes) {
+                                                let root_y = layout.explorer.y;
+                                                let entry_start = root_y + 1;
+                                                if mx < app.explorer_width && my >= entry_start && app.root_expanded {
+                                                    let i = (my - entry_start) as usize + app.explorer_scroll;
+                                                    if i < app.tree.len() {
+                                                        if b & 4 != 0 {
+                                                            // Shift: range from anchor to i
+                                                            let anchor = app.explorer_anchor.unwrap_or(app.explorer_selected);
+                                                            let (lo, hi) = if anchor <= i { (anchor, i) } else { (i, anchor) };
+                                                            app.explorer_selection.clear();
+                                                            for j in lo..=hi { app.explorer_selection.insert(j); }
+                                                            app.explorer_selected = i;
+                                                        } else {
+                                                            // Ctrl: toggle individual item
+                                                            if app.explorer_selection.contains(&i) {
+                                                                app.explorer_selection.remove(&i);
+                                                            } else {
+                                                                app.explorer_selection.insert(i);
+                                                                app.explorer_anchor = Some(i);
+                                                            }
+                                                            app.explorer_selected = i;
+                                                        }
+                                                        dirty = true;
+                                                    }
+                                                }
+                                            }
+                                        }
                                         _ => {
                                             dirty = false;
                                         }
@@ -948,8 +1198,9 @@ fn main() -> io::Result<()> {
                                             let hover_info = app.current().map(|buf| {
                                                 let buf_row = (my - layout.editor.y) as usize
                                                     + buf.scroll_row;
-                                                let buf_col =
-                                                    (mx - text_x) as usize + buf.scroll_col;
+                                                let chars: Vec<char> = buf.line(buf_row).chars().collect();
+                                                let scroll_vcol = visual_col_of(&chars, buf.scroll_col, 4);
+                                                let buf_col = char_at_visual(&chars, (mx - text_x) as usize + scroll_vcol, 4);
                                                 (buf_row, buf_col, buf.path.clone())
                                             });
                                             if let Some((buf_row, buf_col, path)) = hover_info {
@@ -1046,7 +1297,14 @@ fn main() -> io::Result<()> {
                                     } else if y == layout.status_bar.y && x < app.lsp_button_end {
                                         app.dragging_divider = false;
                                         app.dragging = false;
-                                        let servers = app.lsp.running();
+                                        let mut servers = app.lsp.running();
+                                        // Also include the expected server for the current file
+                                        // even if it failed to start, so the user can see it.
+                                        if let Some(exp) = app.current().and_then(|b| app.lsp.expected_for(&b.path)) {
+                                            if !servers.contains(&exp) {
+                                                servers.push(exp);
+                                            }
+                                        }
                                         if !servers.is_empty() {
                                             let mut menu =
                                                 popup::LspContextMenu::new(0, 0, &servers);
@@ -1096,7 +1354,9 @@ fn main() -> io::Result<()> {
                                         if let Some(b) = app.current() {
                                             let buf_row = (y - layout.editor.y) as usize + b.scroll_row;
                                             let buf_col = if x >= text_x {
-                                                (x - text_x) as usize + b.scroll_col
+                                                let chars: Vec<char> = b.line(buf_row).chars().collect();
+                                                let scroll_vcol = visual_col_of(&chars, b.scroll_col, 4);
+                                                char_at_visual(&chars, (x - text_x) as usize + scroll_vcol, 4)
                                             } else { 0 };
                                             let path = b.path.clone();
                                             let has_lsp = app.lsp.has_server_for(&path);
@@ -1110,6 +1370,8 @@ fn main() -> io::Result<()> {
                                             let mut menu = popup::EditorContextMenu::new(x, y, path, buf_row, buf_col, has_lsp);
                                             menu.clamp(w, h);
                                             app.editor_context_menu = Some(menu);
+                                            app.hover_card = None;
+                                            let _ = hover_tx.send(HoverCmd::Cancel);
                                         }
                                     } else if x < app.explorer_width {
                                         let root_y = layout.explorer.y;
@@ -1199,7 +1461,9 @@ fn main() -> io::Result<()> {
                                     let click_row =
                                         (y.saturating_sub(layout.editor.y)) as usize + b.scroll_row;
                                     let click_col = if x >= text_x {
-                                        (x - text_x) as usize + b.scroll_col
+                                        let chars: Vec<char> = b.line(click_row).chars().collect();
+                                        let scroll_vcol = visual_col_of(&chars, b.scroll_col, 4);
+                                        char_at_visual(&chars, (x - text_x) as usize + scroll_vcol, 4)
                                     } else {
                                         0
                                     };
@@ -1283,7 +1547,14 @@ fn main() -> io::Result<()> {
                     dirty = true;
                 }
                 lsp::ServerMessage::Hover { path, segments } => {
-                    if app.current().map(|b| &b.path) == Some(&path) {
+                    let any_popup = app.editor_context_menu.is_some()
+                        || app.context_menu.is_some()
+                        || app.lsp_menu.is_some()
+                        || app.prompt.is_some()
+                        || app.confirm_dialog.is_some()
+                        || app.unsaved_dialog.is_some()
+                        || app.recovery_dialog.is_some();
+                    if !any_popup && app.current().map(|b| &b.path) == Some(&path) {
                         let (x, y) = app.hover_screen_pos;
                         let mut lines: Vec<(String, bool, highlight::Spans)> = Vec::new();
                         for seg in &segments {
@@ -1323,7 +1594,8 @@ fn main() -> io::Result<()> {
                     dirty = true;
                 }
                 lsp::ServerMessage::RenameApply { edits } => {
-                    apply_workspace_edits(&mut app, edits);
+                    let label = app.pending_rename_label.take();
+                    apply_workspace_edits(&mut app, edits, label);
                     app.refresh_git();
                     dirty = true;
                 }
@@ -1379,6 +1651,17 @@ fn main() -> io::Result<()> {
         }
 
         if app.tick_status() { dirty = true; }
+        app.tick_swaps();
+
+        if let Ok((new_w, new_h)) = termion::terminal_size() {
+            if new_w != w || new_h != h {
+                w = new_w;
+                h = new_h;
+                renderer.resize(w, h);
+                write!(out, "\x1b[2J")?;
+                dirty = true;
+            }
+        }
 
         if dirty {
             if !is_motion {
@@ -1428,7 +1711,12 @@ fn handle_click(app: &mut App, layout: &Layout, x: u16, y: u16, h: u16, eh: usiz
             let close_x = tx + extra + 1 + 1 + name.len() as u16 + dot_len + 1;
             if x >= tx && x < tx + tab_width {
                 if x == close_x {
-                    app.close_tab(i);
+                    if app.tabs.get(i).map(|t| !t.virtual_tab && t.modified).unwrap_or(false) {
+                        let path = app.tabs[i].path.clone();
+                        app.unsaved_dialog = Some(popup::UnsavedDialog::close_tab(i, path));
+                    } else {
+                        app.close_tab(i);
+                    }
                 } else if i != app.active_tab {
                     app.push_history();
                     app.active_tab = i;
@@ -1454,7 +1742,11 @@ fn handle_click(app: &mut App, layout: &Layout, x: u16, y: u16, h: u16, eh: usiz
         if y >= entry_start && app.root_expanded {
             let i = (y - entry_start) as usize + app.explorer_scroll;
             if i < app.tree.len() {
+                // Plain click: collapse multi-selection to just this item.
                 app.explorer_selected = i;
+                app.explorer_selection.clear();
+                app.explorer_selection.insert(i);
+                app.explorer_anchor = Some(i);
                 let path = app.tree[i].path.clone();
                 if app.tree[i].is_dir {
                     filetree::toggle(&mut app.tree, i);
@@ -1477,7 +1769,9 @@ fn handle_click(app: &mut App, layout: &Layout, x: u16, y: u16, h: u16, eh: usiz
         if let Some(b) = app.current_mut() {
             let row = (y - layout.editor.y) as usize + b.scroll_row;
             let col = if x >= text_x {
-                (x - text_x) as usize + b.scroll_col
+                let chars: Vec<char> = b.line(row).chars().collect();
+                let scroll_vcol = visual_col_of(&chars, b.scroll_col, 4);
+                char_at_visual(&chars, (x - text_x) as usize + scroll_vcol, 4)
             } else {
                 0
             };
@@ -1544,6 +1838,35 @@ fn set_clipboard(text: &str) {
     });
 }
 
+fn cursor_hidden_by_popup(app: &App, cx: u16, cy: u16, w: u16) -> bool {
+    fn over(px: u16, py: u16, pw: u16, ph: u16, cx: u16, cy: u16) -> bool {
+        cx >= px && cx < px.saturating_add(pw) && cy >= py && cy < py.saturating_add(ph)
+    }
+    if let Some(m) = &app.context_menu {
+        if over(m.x, m.y, m.width(), m.height(), cx, cy) { return true; }
+    }
+    if let Some(m) = &app.editor_context_menu {
+        if over(m.x, m.y, m.width(), m.height(), cx, cy) { return true; }
+    }
+    if let Some(m) = &app.lsp_menu {
+        if over(m.x, m.y, m.width(), m.height(), cx, cy) { return true; }
+    }
+    if let Some(card) = &app.hover_card {
+        if !card.lines.is_empty() {
+            let max_w = w.saturating_sub(6).min(68) as usize;
+            let wrapped = wrap_for_card(&card.lines, max_w);
+            if !wrapped.is_empty() {
+                let cw = wrapped.iter().map(|(l, _, _)| l.chars().count()).max().unwrap_or(0) as u16 + 4;
+                let ch = wrapped.len().min(12) as u16 + 2;
+                let px = card.x.min(w.saturating_sub(cw));
+                let py = if card.y >= ch { card.y - ch } else { card.y + 1 };
+                if over(px, py, cw, ch, cx, cy) { return true; }
+            }
+        }
+    }
+    false
+}
+
 fn sync_cursor<W: Write>(out: &mut W, app: &App, w: u16, h: u16) -> io::Result<()> {
     if let Some(prompt) = &app.prompt {
         const PW: u16 = 46;
@@ -1557,33 +1880,35 @@ fn sync_cursor<W: Write>(out: &mut W, app: &App, w: u16, h: u16) -> io::Result<(
         return Ok(());
     }
 
-    if app.context_menu.is_some()
-        || app.editor_context_menu.is_some()
-        || app.lsp_menu.is_some()
-        || app.hover_card.is_some()
-    {
+    let layout = Layout::compute(w, h, app.explorer_width);
+    let screen_pos = app.editor_focused.then(|| {
+        app.current().and_then(|b| {
+            if b.cursor_row < b.scroll_row { return None; }
+            let chars: Vec<char> = b.line(b.cursor_row).chars().collect();
+            let cursor_vcol = visual_col_of(&chars, b.cursor_col, 4);
+            let scroll_vcol  = visual_col_of(&chars, b.scroll_col,  4);
+            if cursor_vcol < scroll_vcol { return None; }
+            let sr = layout.editor.y + (b.cursor_row - b.scroll_row) as u16;
+            let sc = layout.editor.x + gutter_width(app) + (cursor_vcol - scroll_vcol) as u16;
+            if sr < layout.editor.y + layout.editor.height && sc < layout.editor.x + layout.editor.width {
+                Some((sc, sr))
+            } else {
+                None
+            }
+        })
+    }).flatten();
+
+    let Some((sc, sr)) = screen_pos else {
         write!(out, "\x1b[?25l")?;
         out.flush()?;
         return Ok(());
-    }
+    };
 
-    let layout = Layout::compute(w, h, app.explorer_width);
-    if app.editor_focused {
-        if let Some(b) = app.current() {
-            if b.cursor_row >= b.scroll_row && b.cursor_col >= b.scroll_col {
-                let sr = layout.editor.y + (b.cursor_row - b.scroll_row) as u16;
-                let sc = layout.editor.x + gutter_width(app) + (b.cursor_col - b.scroll_col) as u16;
-                if sr < layout.editor.y + layout.editor.height
-                    && sc < layout.editor.x + layout.editor.width
-                {
-                    write!(out, "\x1b[{};{}H\x1b[?25h\x1b[5 q", sr + 1, sc + 1)?;
-                    out.flush()?;
-                    return Ok(());
-                }
-            }
-        }
+    if cursor_hidden_by_popup(app, sc, sr, w) {
+        write!(out, "\x1b[?25l")?;
+    } else {
+        write!(out, "\x1b[{};{}H\x1b[?25h\x1b[5 q", sr + 1, sc + 1)?;
     }
-    write!(out, "\x1b[?25l")?;
     out.flush()?;
     Ok(())
 }
@@ -1619,8 +1944,20 @@ fn draw(
     }
     if let Some(menu) = &app.completion_menu {
         if let Some(active) = app.current() {
-            draw_completion_menu(buf, menu, &layout, gutter_width(app), active.cursor_row, active.cursor_col, active.scroll_row, active.scroll_col, h, w);
+            let cur_chars: Vec<char> = active.line(active.cursor_row).chars().collect();
+            let cur_vcol    = visual_col_of(&cur_chars, active.cursor_col,  4);
+            let scroll_vcol = visual_col_of(&cur_chars, active.scroll_col,  4);
+            draw_completion_menu(buf, menu, &layout, gutter_width(app), active.cursor_row, cur_vcol, active.scroll_row, scroll_vcol, h, w);
         }
+    }
+    if let Some(dlg) = &app.confirm_dialog {
+        draw_confirm_dialog(buf, dlg, &app.root, w, h);
+    }
+    if let Some(dlg) = &app.unsaved_dialog {
+        draw_unsaved_dialog(buf, dlg, &app.root, w, h);
+    }
+    if let Some(dlg) = &app.recovery_dialog {
+        draw_recovery_dialog(buf, dlg, &app.root, w, h);
     }
 }
 
@@ -1797,7 +2134,8 @@ fn draw_explorer(buf: &mut Buffer, app: &App, layout: &Layout) {
         if sy >= layout.explorer.y + layout.explorer.height {
             break;
         }
-        let is_sel = abs_i == app.explorer_selected;
+        let is_sel = abs_i == app.explorer_selected
+            || (!app.explorer_selection.is_empty() && app.explorer_selection.contains(&abs_i));
         let bg = if is_sel { BG_SEL } else { BG_DARK };
         buf.fill(
             Rect { x: 0, y: sy, width: layout.explorer.width, height: 1 },
@@ -1895,22 +2233,6 @@ fn draw_scrollbar(buf: &mut Buffer, app: &App, layout: &Layout) {
         }
     }
 
-    // Build per-row git diff kind (Deleted > Modified > Added priority).
-    let mut diff_marks: Vec<Option<git::DiffKind>> = vec![None; h];
-    if let Some(diff) = app.git_line_diff.get(&active.path) {
-        for (&line, &kind) in diff {
-            let row = (line * h / total).min(h - 1);
-            diff_marks[row] = Some(match (diff_marks[row], kind) {
-                (None, k) => k,
-                (Some(git::DiffKind::Deleted), _) => git::DiffKind::Deleted,
-                (_, git::DiffKind::Deleted) => git::DiffKind::Deleted,
-                (Some(git::DiffKind::Modified), _) => git::DiffKind::Modified,
-                (_, git::DiffKind::Modified) => git::DiffKind::Modified,
-                _ => kind,
-            });
-        }
-    }
-
     for r in 0..h {
         let sy = y + r as u16;
         let in_thumb = r >= thumb_top && r < thumb_top + thumb_h;
@@ -1919,13 +2241,6 @@ fn draw_scrollbar(buf: &mut Buffer, app: &App, layout: &Layout) {
             let fg = match sev {
                 1 => Color::rgb(224, 108, 117),
                 _ => Color::rgb(229, 192, 123),
-            };
-            buf.set(x, sy, Cell { ch: '▎', fg, bg, bold: false, underline: false });
-        } else if let Some(kind) = diff_marks[r] {
-            let fg = match kind {
-                git::DiffKind::Added    => Color::rgb(152, 195, 121),
-                git::DiffKind::Modified => Color::rgb(229, 192, 123),
-                git::DiffKind::Deleted  => Color::rgb(224, 108, 117),
             };
             buf.set(x, sy, Cell { ch: '▎', fg, bg, bold: false, underline: false });
         } else {
@@ -2145,21 +2460,34 @@ fn draw_editor(
         let line = active.line(buf_row);
         let chars: Vec<char> = line.chars().collect();
         let leading_ws: usize = chars.iter().take_while(|&&c| c == ' ' || c == '\t').count();
+        // Compute visual leading whitespace of a row, expanding tabs.
+        let row_vis_lws = |r: usize| -> usize {
+            let mut vcol = 0usize;
+            for ch in active.line(r).chars() {
+                match ch {
+                    '\t' => vcol = (vcol / tab_size + 1) * tab_size,
+                    ' '  => vcol += 1,
+                    _    => break,
+                }
+            }
+            vcol
+        };
         let effective_lws = if buf_row >= active.line_count() || line.trim().is_empty() {
-            // Limit scan to the visible range — all array lookups, no rope access.
+            // For blank/empty lines, inherit visual LWS from the nearest non-blank
+            // neighbours so guides connect through blank lines with tab indentation.
             let vis_end = (vis_start + visible_meta.len()).min(active.line_count());
             let prev = (vis_start..buf_row)
                 .rev()
                 .find(|&r| !meta(r).0)
-                .map(|r| meta(r).1)
+                .map(row_vis_lws)
                 .unwrap_or(0);
             let next = (buf_row + 1..vis_end)
                 .find(|&r| !meta(r).0)
-                .map(|r| meta(r).1)
+                .map(row_vis_lws)
                 .unwrap_or(0);
             prev.max(next)
         } else {
-            leading_ws
+            visual_col_of(&chars, leading_ws, tab_size)
         };
         let row_diags: Vec<&LspDiagnostic> = app
             .diagnostics
@@ -2172,23 +2500,46 @@ fn draw_editor(
             .map(|v| v.iter().filter(|t| t.line as usize == buf_row).collect())
             .unwrap_or_default();
 
+        // Expand tabs into visual cells: (display_char, original_char_index).
+        let scroll_vcol = visual_col_of(&chars, active.scroll_col, tab_size);
+        let vis_cells: Vec<(char, usize)> = {
+            let mut cells = Vec::with_capacity(chars.len() + 16);
+            let mut vcol = 0usize;
+            for (ci, &ch) in chars.iter().enumerate() {
+                if ch == '\t' {
+                    let next_stop = (vcol / tab_size + 1) * tab_size;
+                    for _ in vcol..next_stop { cells.push((' ', ci)); }
+                    vcol = next_stop;
+                } else {
+                    cells.push((ch, ci));
+                    vcol += 1;
+                }
+            }
+            cells
+        };
+
         for col_offset in 0..text_cols {
-            let buf_col = active.scroll_col + col_offset;
+            let vcol = scroll_vcol + col_offset;
             let sx = text_x + col_offset as u16;
-            let cell_bg = if sel_contains(sel, buf_row, buf_col) {
+            // buf_col is the char index for semantic/diag/sel lookups.
+            let buf_col = vis_cells.get(vcol).map(|&(_, ci)| ci);
+            let eol_col = chars.len(); // char index used for newline selection
+            let sel_col = buf_col.unwrap_or(eol_col);
+            let cell_bg = if sel_contains(sel, buf_row, sel_col) {
                 BG_SELECT
-            } else if in_match(buf_row, buf_col) {
+            } else if buf_col.map(|ci| in_match(buf_row, ci)).unwrap_or(false) {
                 BG_MATCH
             } else {
                 line_bg
             };
-            if let Some(&ch) = chars.get(buf_col) {
+            if let Some((ch, buf_col)) = vis_cells.get(vcol).copied() {
                 // Semantic tokens take priority over tree-sitter
                 let sem = row_sem
                     .iter()
                     .find(|t| buf_col >= t.col_start as usize && buf_col < t.col_end as usize);
                 let mut fg = if let Some(t) = sem {
                     semantic_color(&t.token_type)
+                        .unwrap_or_else(|| span_color(highlights, app.active_tab, buf_row, buf_col))
                 } else {
                     span_color(highlights, app.active_tab, buf_row, buf_col)
                 };
@@ -2208,9 +2559,10 @@ fn draw_editor(
                         _ => fg,
                     };
                 }
-                let is_guide = (ch == ' ' || ch == '\t')
+                // Guide at tab-stop visual columns within leading whitespace.
+                let is_guide = ch == ' '
                     && buf_col < leading_ws
-                    && buf_col % tab_size == 0
+                    && vcol % tab_size == 0
                     && !sel_contains(sel, buf_row, buf_col);
                 if is_guide {
                     let guide_fg = match active_guide_col {
@@ -2225,7 +2577,7 @@ fn draw_editor(
                         sx,
                         sy,
                         Cell {
-                            ch: '│',
+                            ch: '▏',
                             fg: guide_fg,
                             bg: cell_bg,
                             bold: false,
@@ -2245,12 +2597,12 @@ fn draw_editor(
                         },
                     );
                 }
-            } else if buf_col < effective_lws
-                && buf_col % tab_size == 0
-                && !sel_contains(sel, buf_row, buf_col)
+            } else if vcol < effective_lws
+                && vcol % tab_size == 0
+                && !sel_contains(sel, buf_row, eol_col)
             {
                 let guide_fg = match active_guide_col {
-                    Some(c) if c == buf_col && buf_row >= block_start && buf_row <= block_end => {
+                    Some(c) if c == vcol && buf_row >= block_start && buf_row <= block_end => {
                         GUIDE_ACTIVE
                     }
                     _ => GUIDE,
@@ -2259,14 +2611,14 @@ fn draw_editor(
                     sx,
                     sy,
                     Cell {
-                        ch: '│',
+                        ch: '▏',
                         fg: guide_fg,
                         bg: line_bg,
                         bold: false,
                         underline: false,
                     },
                 );
-            } else if sel_contains(sel, buf_row, buf_col) {
+            } else if sel_contains(sel, buf_row, eol_col) {
                 buf.set(
                     sx,
                     sy,
@@ -2306,7 +2658,7 @@ fn draw_editor(
             };
 
             // Screen x right after the last visible character, with a 2-col gap.
-            let line_len_vis = chars.len().saturating_sub(active.scroll_col).min(text_cols);
+            let line_len_vis = vis_cells.len().saturating_sub(scroll_vcol).min(text_cols);
             let editor_right = layout.editor.x + layout.editor.width;
             let mut ix = text_x + line_len_vis as u16 + 2;
 
@@ -2371,6 +2723,37 @@ fn sel_contains(sel: Option<((usize, usize), (usize, usize))>, row: usize, col: 
     true
 }
 
+/// Visual column of `char_idx` in `chars`, expanding tabs to `tab_size`-wide stops.
+fn visual_col_of(chars: &[char], char_idx: usize, tab_size: usize) -> usize {
+    let mut vcol = 0usize;
+    for (i, &ch) in chars.iter().enumerate() {
+        if i >= char_idx { break; }
+        if ch == '\t' {
+            vcol = (vcol / tab_size + 1) * tab_size;
+        } else {
+            vcol += 1;
+        }
+    }
+    vcol
+}
+
+/// Char index in `chars` corresponding to visual column `target`, expanding tabs.
+/// If `target` falls inside a tab, returns the tab's char index.
+fn char_at_visual(chars: &[char], target: usize, tab_size: usize) -> usize {
+    let mut vcol = 0usize;
+    for (i, &ch) in chars.iter().enumerate() {
+        if vcol >= target { return i; }
+        if ch == '\t' {
+            let next = (vcol / tab_size + 1) * tab_size;
+            if target < next { return i; }
+            vcol = next;
+        } else {
+            vcol += 1;
+        }
+    }
+    chars.len()
+}
+
 fn mouse_motion_pos(bytes: &[u8]) -> Option<(u16, u16)> {
     if let Ok(s) = std::str::from_utf8(bytes) {
         if let Some(inner) = s.strip_prefix("\x1b[<").and_then(|s| s.strip_suffix('M')) {
@@ -2410,6 +2793,15 @@ fn parse_sgr_press(bytes: &[u8]) -> Option<(u32, u16, u16)> {
     let x: u16 = it.next()?.parse::<u16>().ok()?.saturating_sub(1);
     let y: u16 = it.next()?.parse::<u16>().ok()?.saturating_sub(1);
     Some((btn, x, y))
+}
+
+fn lsp_short_name(key: &str) -> &str {
+    match key {
+        "typescript-language-server" => "typescript",
+        "rust-analyzer"              => "rust-analyzer",
+        "lua-language-server"        => "lua",
+        other                        => other,
+    }
 }
 
 fn tab_name(tab: &editor::Buffer) -> String {
@@ -2490,17 +2882,20 @@ fn execute_menu_action(app: &mut App, action: popup::MenuAction) {
             app.prompt = Some(popup::InputPrompt::rename(target));
         }
         popup::MenuAction::Delete => {
-            let _ = if target.is_file() {
-                std::fs::remove_file(&target)
+            // Collect targets: if the right-clicked item is part of a multi-selection,
+            // delete the whole selection; otherwise just this target.
+            let paths: Vec<std::path::PathBuf> = if app.explorer_selection.len() > 1
+                && app.explorer_selection.iter().any(|&idx| app.tree.get(idx).map(|e| e.path == target).unwrap_or(false))
+            {
+                let mut v: Vec<_> = app.explorer_selection.iter()
+                    .filter_map(|&idx| app.tree.get(idx).map(|e| e.path.clone()))
+                    .collect();
+                v.sort();
+                v
             } else {
-                std::fs::remove_dir_all(&target)
+                vec![target]
             };
-            app.tabs.retain(|t| !t.path.starts_with(&target));
-            if app.active_tab >= app.tabs.len() && !app.tabs.is_empty() {
-                app.active_tab = app.tabs.len() - 1;
-            }
-            { let (t, s) = filetree::reload(&app.root, &app.tree, app.explorer_selected); app.tree = t; app.explorer_selected = s; }
-            app.refresh_git();
+            app.confirm_dialog = Some(popup::ConfirmDialog::delete(paths));
         }
     }
 }
@@ -2543,10 +2938,32 @@ fn submit_prompt(app: &mut App) {
         }
         popup::PromptAction::RenameSymbol => {
             if let Some((line, col)) = prompt.lsp_pos {
-                app.lsp.rename_symbol(&prompt.context, line, col, &prompt.value);
+                let old_name = prompt.original.clone();
+                let new_name = prompt.value.clone();
+                app.lsp.rename_symbol(&prompt.context, line, col, &new_name);
+                app.pending_rename_label = Some(format!("{} → {}", new_name, old_name));
             }
         }
     }
+    app.refresh_git();
+}
+
+fn do_delete_files(app: &mut App, paths: Vec<std::path::PathBuf>) {
+    for path in &paths {
+        let _ = if path.is_file() {
+            std::fs::remove_file(path)
+        } else {
+            std::fs::remove_dir_all(path)
+        };
+        app.tabs.retain(|t| !t.path.starts_with(path));
+    }
+    if app.active_tab >= app.tabs.len() && !app.tabs.is_empty() {
+        app.active_tab = app.tabs.len() - 1;
+    }
+    app.explorer_selection.clear();
+    let (t, s) = filetree::reload(&app.root, &app.tree, app.explorer_selected);
+    app.tree = t;
+    app.explorer_selected = s;
     app.refresh_git();
 }
 
@@ -2607,14 +3024,45 @@ fn draw_statusbar(buf: &mut Buffer, app: &mut App, layout: &Layout) {
 
     // ── LSP button ──────────────────────────────────────────────────────────
     let servers = app.lsp.running();
-    let lsp_label = if servers.is_empty() {
-        " \u{f121}  LSP ".to_string()
+    // If the active tab is virtual (logs, diagnostics, etc.) it has no language —
+    // fall back to any open real file so the indicator stays visible.
+    let expected = app.current()
+        .filter(|b| !b.virtual_tab)
+        .and_then(|b| app.lsp.expected_for(&b.path))
+        .or_else(|| {
+            app.tabs.iter()
+                .filter(|b| !b.virtual_tab)
+                .find_map(|b| app.lsp.expected_for(&b.path))
+        });
+    let missing = expected.filter(|&k| !app.lsp.is_running(k));
+
+    // Icon + prefix
+    let prefix = " \u{f121}  ";
+    buf.write_str(x, y, prefix, SB_FG, SB_LSP_BG);
+    x += prefix.chars().count() as u16;
+
+    if servers.is_empty() && missing.is_none() {
+        // Nothing running and nothing expected — dim "LSP"
+        buf.write_str(x, y, "LSP ", SB_FG_DIM, SB_LSP_BG);
+        x += 4;
     } else {
-        format!(" \u{f121}  LSP:{} ", servers.len())
-    };
-    let lsp_fg = if servers.is_empty() { SB_FG_DIM } else { SB_FG };
-    buf.write_str(x, y, &lsp_label, lsp_fg, SB_LSP_BG);
-    x += lsp_label.chars().count() as u16;
+        // Running servers (bright)
+        for (i, &s) in servers.iter().enumerate() {
+            let label = if i + 1 < servers.len() || missing.is_some() {
+                format!("{} ", lsp_short_name(s))
+            } else {
+                format!("{} ", lsp_short_name(s))
+            };
+            buf.write_str(x, y, &label, SB_FG, SB_LSP_BG);
+            x += label.chars().count() as u16;
+        }
+        // Expected-but-not-running server (amber + "!")
+        if let Some(key) = missing {
+            let label = format!("{}! ", lsp_short_name(key));
+            buf.write_str(x, y, &label, Color::rgb(229, 192, 123), SB_LSP_BG);
+            x += label.chars().count() as u16;
+        }
+    }
     let lsp_next_bg = if app.git_branch.is_some() {
         SB_BRANCH_BG
     } else {
@@ -2886,6 +3334,207 @@ fn draw_prompt(buf: &mut Buffer, prompt: &popup::InputPrompt, w: u16, h: u16) {
     buf.set(px + PW - 1, by, Cell::new('┘', POPUP_BORDER, POPUP_BG));
 }
 
+fn draw_confirm_dialog(buf: &mut Buffer, dlg: &popup::ConfirmDialog, root: &std::path::Path, w: u16, h: u16) {
+    const MAX_LIST: usize = 15;
+    let shown = dlg.paths.len().min(MAX_LIST);
+    let extra = dlg.paths.len().saturating_sub(MAX_LIST);
+
+    // Build display lines for paths (relative to root when possible)
+    let path_lines: Vec<String> = dlg.paths[..shown].iter().map(|p| {
+        let rel = p.strip_prefix(root).unwrap_or(p);
+        format!("  \u{2022} {}", rel.display())
+    }).collect();
+
+    let count_line = if dlg.paths.len() == 1 {
+        "  Delete 1 item permanently?".to_string()
+    } else {
+        format!("  Delete {} items permanently?", dlg.paths.len())
+    };
+    let extra_line = if extra > 0 { Some(format!("  ...and {} more", extra)) } else { None };
+    let footer = "  [Enter / Y] Delete   [Esc / N] Cancel";
+
+    // Compute dialog width
+    let inner_w = [
+        count_line.len(),
+        path_lines.iter().map(|l| l.len()).max().unwrap_or(0),
+        extra_line.as_deref().map(|l| l.len()).unwrap_or(0),
+        footer.len(),
+        18, // minimum
+    ].iter().copied().max().unwrap_or(40) + 4;
+    let pw = (inner_w as u16).min(w.saturating_sub(4));
+
+    // Height: top border + title + sep + blank + count + paths + (extra?) + blank + footer + bottom
+    let ph = 2 + 1 + 1 + 1 + shown as u16 + extra_line.is_some() as u16 + 1 + 1 + 1;
+    let px = w.saturating_sub(pw) / 2;
+    let py = h.saturating_sub(ph) / 2;
+
+    let hline = |buf: &mut Buffer, y: u16, left: char, mid: char, right: char| {
+        buf.set(px, y, Cell::new(left, POPUP_BORDER, POPUP_BG));
+        for i in 1..pw - 1 { buf.set(px + i, y, Cell::new(mid, POPUP_BORDER, POPUP_BG)); }
+        buf.set(px + pw - 1, y, Cell::new(right, POPUP_BORDER, POPUP_BG));
+    };
+    let side = |buf: &mut Buffer, y: u16| {
+        buf.set(px, y, Cell::new('│', POPUP_BORDER, POPUP_BG));
+        buf.set(px + pw - 1, y, Cell::new('│', POPUP_BORDER, POPUP_BG));
+    };
+
+    buf.fill(Rect { x: px, y: py, width: pw, height: ph }, Cell::new(' ', FG, POPUP_BG));
+
+    let mut row = py;
+    hline(buf, row, '┌', '─', '┐'); row += 1;
+
+    // Title
+    side(buf, row);
+    buf.write_str(px + 2, row, "Confirm Delete", Color::rgb(255, 255, 255), POPUP_BG); row += 1;
+
+    hline(buf, row, '├', '─', '┤'); row += 1;
+
+    // Blank
+    side(buf, row); row += 1;
+
+    // Count line
+    side(buf, row);
+    let warn_color = Color::rgb(224, 108, 117);
+    buf.write_str(px + 2, row, &count_line.trim_start(), warn_color, POPUP_BG); row += 1;
+
+    // Path list
+    for pl in &path_lines {
+        side(buf, row);
+        let disp: String = pl.chars().take((pw as usize).saturating_sub(4)).collect();
+        buf.write_str(px + 2, row, &disp, FG_DIM, POPUP_BG); row += 1;
+    }
+
+    // "...and N more"
+    if let Some(el) = &extra_line {
+        side(buf, row);
+        buf.write_str(px + 2, row, &el.trim_start(), FG_DIM, POPUP_BG); row += 1;
+    }
+
+    // Blank
+    side(buf, row); row += 1;
+
+    // Footer
+    side(buf, row);
+    buf.write_str(px + 2, row, footer.trim_start(), FG_DIM, POPUP_BG); row += 1;
+
+    hline(buf, row, '└', '─', '┘');
+}
+
+fn draw_unsaved_dialog(buf: &mut Buffer, dlg: &popup::UnsavedDialog, root: &std::path::Path, w: u16, h: u16) {
+    const MAX_LIST: usize = 10;
+    let shown = dlg.paths.len().min(MAX_LIST);
+    let extra = dlg.paths.len().saturating_sub(MAX_LIST);
+
+    let is_quit = matches!(dlg.action, popup::UnsavedAction::Quit);
+    let path_lines: Vec<String> = dlg.paths[..shown].iter().map(|p| {
+        let rel = p.strip_prefix(root).unwrap_or(p);
+        format!("  \u{2022} {}", rel.display())
+    }).collect();
+    let header = if dlg.paths.len() == 1 {
+        "  1 file has unsaved changes.".to_string()
+    } else {
+        format!("  {} files have unsaved changes.", dlg.paths.len())
+    };
+    let extra_line = if extra > 0 { Some(format!("  ...and {} more", extra)) } else { None };
+    let (save_label, discard_label) = if is_quit {
+        ("[S] Save All", "[D] Discard All")
+    } else {
+        ("[S] Save", "[D] Discard")
+    };
+    let footer = format!("  {}   {}   [Esc] Cancel", save_label, discard_label);
+
+    let inner_w = [
+        header.len(),
+        path_lines.iter().map(|l| l.len()).max().unwrap_or(0),
+        extra_line.as_deref().map(|l| l.len()).unwrap_or(0),
+        footer.len(),
+        20,
+    ].iter().copied().max().unwrap_or(40) + 4;
+    let pw = (inner_w as u16).min(w.saturating_sub(4));
+    let ph = 2 + 1 + 1 + 1 + shown as u16 + extra_line.is_some() as u16 + 1 + 1 + 1;
+    let px = w.saturating_sub(pw) / 2;
+    let py = h.saturating_sub(ph) / 2;
+
+    let hline = |buf: &mut Buffer, y: u16, left: char, mid: char, right: char| {
+        buf.set(px, y, Cell::new(left, POPUP_BORDER, POPUP_BG));
+        for i in 1..pw - 1 { buf.set(px + i, y, Cell::new(mid, POPUP_BORDER, POPUP_BG)); }
+        buf.set(px + pw - 1, y, Cell::new(right, POPUP_BORDER, POPUP_BG));
+    };
+    let side = |buf: &mut Buffer, y: u16| {
+        buf.set(px, y, Cell::new('│', POPUP_BORDER, POPUP_BG));
+        buf.set(px + pw - 1, y, Cell::new('│', POPUP_BORDER, POPUP_BG));
+    };
+
+    buf.fill(Rect { x: px, y: py, width: pw, height: ph }, Cell::new(' ', FG, POPUP_BG));
+
+    let mut row = py;
+    hline(buf, row, '┌', '─', '┐'); row += 1;
+    side(buf, row);
+    buf.write_str(px + 2, row, "Unsaved Changes", Color::rgb(255, 255, 255), POPUP_BG); row += 1;
+    hline(buf, row, '├', '─', '┤'); row += 1;
+    side(buf, row); row += 1;
+    side(buf, row);
+    buf.write_str(px + 2, row, header.trim_start(), Color::rgb(229, 192, 123), POPUP_BG); row += 1;
+    for pl in &path_lines {
+        side(buf, row);
+        let disp: String = pl.chars().take((pw as usize).saturating_sub(4)).collect();
+        buf.write_str(px + 2, row, &disp, FG_DIM, POPUP_BG); row += 1;
+    }
+    if let Some(el) = &extra_line {
+        side(buf, row);
+        buf.write_str(px + 2, row, el.trim_start(), FG_DIM, POPUP_BG); row += 1;
+    }
+    side(buf, row); row += 1;
+    side(buf, row);
+    buf.write_str(px + 2, row, footer.trim_start(), FG_DIM, POPUP_BG); row += 1;
+    hline(buf, row, '└', '─', '┘');
+}
+
+fn draw_recovery_dialog(buf: &mut Buffer, dlg: &popup::RecoveryDialog, root: &std::path::Path, w: u16, h: u16) {
+    let rel = dlg.path.strip_prefix(root).unwrap_or(&dlg.path);
+    let path_line = format!("  \u{2022} {}", rel.display());
+    let footer = "  [R] Recover   [K] Keep Disk Version";
+
+    let inner_w = [
+        "  A swap file with unsaved changes was found:".len(),
+        path_line.len(),
+        footer.len(),
+        20,
+    ].iter().copied().max().unwrap_or(40) + 4;
+    let pw = (inner_w as u16).min(w.saturating_sub(4));
+    let ph = 2 + 1 + 1 + 1 + 1 + 1 + 1 + 1;
+    let px = w.saturating_sub(pw) / 2;
+    let py = h.saturating_sub(ph) / 2;
+
+    let hline = |buf: &mut Buffer, y: u16, left: char, mid: char, right: char| {
+        buf.set(px, y, Cell::new(left, POPUP_BORDER, POPUP_BG));
+        for i in 1..pw - 1 { buf.set(px + i, y, Cell::new(mid, POPUP_BORDER, POPUP_BG)); }
+        buf.set(px + pw - 1, y, Cell::new(right, POPUP_BORDER, POPUP_BG));
+    };
+    let side = |buf: &mut Buffer, y: u16| {
+        buf.set(px, y, Cell::new('│', POPUP_BORDER, POPUP_BG));
+        buf.set(px + pw - 1, y, Cell::new('│', POPUP_BORDER, POPUP_BG));
+    };
+
+    buf.fill(Rect { x: px, y: py, width: pw, height: ph }, Cell::new(' ', FG, POPUP_BG));
+
+    let mut row = py;
+    hline(buf, row, '┌', '─', '┐'); row += 1;
+    side(buf, row);
+    buf.write_str(px + 2, row, "Recover Unsaved Changes?", Color::rgb(255, 255, 255), POPUP_BG); row += 1;
+    hline(buf, row, '├', '─', '┤'); row += 1;
+    side(buf, row); row += 1;
+    side(buf, row);
+    buf.write_str(px + 2, row, "A swap file with unsaved changes was found:", Color::rgb(229, 192, 123), POPUP_BG); row += 1;
+    side(buf, row);
+    let disp: String = path_line.chars().take((pw as usize).saturating_sub(4)).collect();
+    buf.write_str(px + 2, row, &disp, FG_DIM, POPUP_BG); row += 1;
+    side(buf, row); row += 1;
+    side(buf, row);
+    buf.write_str(px + 2, row, footer.trim_start(), FG_DIM, POPUP_BG); row += 1;
+    hline(buf, row, '└', '─', '┘');
+}
+
 fn update_highlights(app: &App, highlights: &mut Vec<Option<highlight::Highlights>>) {
     highlights.resize_with(app.tabs.len(), || None);
     let idx = app.active_tab;
@@ -2895,23 +3544,44 @@ fn update_highlights(app: &App, highlights: &mut Vec<Option<highlight::Highlight
     }
 }
 
-fn semantic_color(token_type: &str) -> Color {
-    match token_type {
-        "class" | "struct" | "type" | "enum" | "interface" | "typeParameter" | "enumMember" => {
-            Color::rgb(78, 201, 176)
-        } // cyan
-        "function" | "method" => Color::rgb(220, 220, 170), // yellow
-        "macro" => Color::rgb(86, 156, 214),                // blue
-        "namespace" => Color::rgb(78, 201, 176),            // cyan
-        "parameter" => Color::rgb(156, 220, 254),           // light blue
-        "variable" => Color::rgb(212, 212, 212),            // default
-        "property" => Color::rgb(156, 220, 254),            // light blue
-        "keyword" | "modifier" | "operator" => Color::rgb(86, 156, 214), // blue
-        "comment" => Color::rgb(106, 153, 85),              // green
-        "string" => Color::rgb(206, 145, 120),              // orange
-        "number" => Color::rgb(181, 206, 168),              // light green
-        _ => FG,
-    }
+fn semantic_color(token_type: &str) -> Option<Color> {
+    // Split "base.modifier" so we can apply modifier-aware logic.
+    let (base, is_default_lib) = match token_type.strip_suffix(".defaultLibrary") {
+        Some(b) => (b, true),
+        None    => (token_type, false),
+    };
+
+    Some(match base {
+        // ── Types ────────────────────────────────────────────────────────────
+        "class" | "struct" | "type" | "enum" | "interface"
+        | "typeParameter" | "enumMember" | "namespace" | "decorator" => Color::rgb(78, 201, 176),
+
+        // ── Functions / methods ──────────────────────────────────────────────
+        "function" | "method" | "member" => Color::rgb(220, 220, 170),
+
+        // ── Properties — built-in ones are callable methods, so yellow ───────
+        "property" if is_default_lib => Color::rgb(220, 220, 170),
+        "property"                   => Color::rgb(156, 220, 254),
+
+        // ── Variables — built-in globals (JSON, Math …) look like namespaces ─
+        "variable" if is_default_lib => Color::rgb(78, 201, 176),
+        "variable"                   => Color::rgb(156, 220, 254),
+
+        // ── Parameters ───────────────────────────────────────────────────────
+        "parameter" => Color::rgb(156, 220, 254),
+
+        // ── Keywords / operators ─────────────────────────────────────────────
+        "keyword" | "modifier" | "operator" => Color::rgb(86, 156, 214),
+
+        // ── Literals ─────────────────────────────────────────────────────────
+        "macro"  => Color::rgb(86, 156, 214),
+        "string" | "regexp" => Color::rgb(206, 145, 120),
+        "number" => Color::rgb(181, 206, 168),
+        "comment" => Color::rgb(106, 153, 85),
+
+        // Unknown token type — let tree-sitter color win instead of forcing FG
+        _ => return None,
+    })
 }
 
 fn span_color(
@@ -3190,7 +3860,7 @@ fn draw_completion_menu(
     term_w: u16,
 ) {
     if menu.is_empty() { return; }
-    if buf_row < scroll_row || buf_col < scroll_col { return; }
+    if buf_row < scroll_row { return; }
 
     let count  = menu.display_count();
     let offset = menu.scroll_offset();
@@ -3281,7 +3951,7 @@ fn accept_completion(app: &mut App, item: lsp::CompletionItem, word_start: usize
     }
 }
 
-fn execute_editor_menu_action(app: &mut App, action: popup::EditorMenuAction, eh: usize, ew: usize) {
+fn execute_editor_menu_action(app: &mut App, action: popup::EditorMenuAction, menu_row: usize, menu_col: usize, eh: usize, ew: usize) {
     use popup::EditorMenuAction::*;
     match action {
         GoToDefinition | GoToDeclaration | GoToTypeDefinition | GoToImplementation => {
@@ -3293,18 +3963,14 @@ fn execute_editor_menu_action(app: &mut App, action: popup::EditorMenuAction, eh
             };
             if let Some(b) = app.current() {
                 let path = b.path.clone();
-                let row = b.cursor_row as u32;
-                let col = b.cursor_col as u32;
-                app.lsp.goto(kind, &path, row, col);
+                app.lsp.goto(kind, &path, menu_row as u32, menu_col as u32);
             }
         }
         RenameSymbol => {
             if let Some(b) = app.current() {
                 let path = b.path.clone();
-                let row = b.cursor_row as u32;
-                let col = b.cursor_col as u32;
-                let word = word_at_cursor(b);
-                app.prompt = Some(popup::InputPrompt::rename_symbol(path, word, row, col));
+                let word = word_at(b, menu_row, menu_col);
+                app.prompt = Some(popup::InputPrompt::rename_symbol(path, word, menu_row as u32, menu_col as u32));
             }
         }
         Cut => {
@@ -3343,7 +4009,7 @@ fn execute_editor_menu_action(app: &mut App, action: popup::EditorMenuAction, eh
                 .map(|a| (a.title.clone(), a.edit.clone()));
             if let Some((title, maybe_edit)) = data {
                 if let Some(edits) = maybe_edit {
-                    apply_workspace_edits(app, edits);
+                    apply_workspace_edits(app, edits, None);
                     app.refresh_git();
                     app.set_status(format!("Applied: {title}"), 3000, StatusLevel::Log);
                 } else {
@@ -3354,10 +4020,10 @@ fn execute_editor_menu_action(app: &mut App, action: popup::EditorMenuAction, eh
     }
 }
 
-fn word_at_cursor(b: &editor::Buffer) -> String {
-    let line = b.line(b.cursor_row);
+fn word_at(b: &editor::Buffer, row: usize, col: usize) -> String {
+    let line = b.line(row);
     let chars: Vec<char> = line.chars().collect();
-    let col = b.cursor_col.min(chars.len().saturating_sub(1));
+    let col = col.min(chars.len().saturating_sub(1));
     let is_word = |c: char| c.is_alphanumeric() || c == '_';
     let mut start = col;
     let mut end = col;
@@ -3366,14 +4032,22 @@ fn word_at_cursor(b: &editor::Buffer) -> String {
     chars[start..end].iter().collect()
 }
 
-fn apply_workspace_edits(app: &mut App, edits: Vec<lsp::FileEdits>) {
+fn apply_workspace_edits(app: &mut App, edits: Vec<lsp::FileEdits>, label: Option<String>) {
+    // Collect (path, new_text, version) for open tabs so we can notify the LSP
+    // after all mutations — can't borrow app.lsp while app.tabs is borrowed mutably.
+    let mut to_sync: Vec<(std::path::PathBuf, String, i32)> = Vec::new();
+
     for file_edit in edits {
         // Sort edits from last to first so earlier edits don't shift offsets.
         let mut sorted = file_edit.edits.clone();
         sorted.sort_by(|a, b| b.start_line.cmp(&a.start_line).then(b.start_col.cmp(&a.start_col)));
 
         if let Some(tab) = app.tabs.iter_mut().find(|t| t.path == file_edit.path) {
-            tab.snapshot();
+            if let Some(ref lbl) = label {
+                tab.snapshot_labeled(lbl.clone());
+            } else {
+                tab.snapshot();
+            }
             for edit in &sorted {
                 let start = tab.rope.line_to_char(edit.start_line as usize) + edit.start_col as usize;
                 let end   = tab.rope.line_to_char(edit.end_line as usize)   + edit.end_col as usize;
@@ -3382,6 +4056,7 @@ fn apply_workspace_edits(app: &mut App, edits: Vec<lsp::FileEdits>) {
             }
             tab.modified = true;
             tab.lsp_version += 1;
+            to_sync.push((tab.path.clone(), tab.rope.to_string(), tab.lsp_version));
         } else {
             // File not open — read, patch, write directly.
             if let Ok(text) = std::fs::read_to_string(&file_edit.path) {
@@ -3392,9 +4067,15 @@ fn apply_workspace_edits(app: &mut App, edits: Vec<lsp::FileEdits>) {
                     rope.remove(start..end);
                     rope.insert(start, &edit.new_text);
                 }
-                let _ = std::fs::write(&file_edit.path, rope.to_string());
+                let new_text = rope.to_string();
+                let _ = std::fs::write(&file_edit.path, &new_text);
             }
         }
+    }
+
+    // Notify LSP of every changed open document so it sees the new content immediately.
+    for (path, text, version) in to_sync {
+        app.lsp.change(&path, &text, version);
     }
 }
 
@@ -3402,7 +4083,15 @@ fn execute_lsp_action(app: &mut App, action: popup::LspAction) {
     match action {
         popup::LspAction::ShowLogs(key) => {
             let lines = app.lsp.logs(key);
-            let text = lines.join("\n");
+            let text = if lines.is_empty() {
+                if app.lsp.is_running(key) {
+                    format!("({} has produced no output yet)", key)
+                } else {
+                    format!("({} is not running — binary may not be installed)", key)
+                }
+            } else {
+                lines.join("\n")
+            };
             app.open_virtual(std::path::PathBuf::from(format!("[{}]", key)), text);
             app.lsp_menu = None;
         }
@@ -3412,7 +4101,21 @@ fn execute_lsp_action(app: &mut App, action: popup::LspAction) {
                 .iter()
                 .map(|t| (t.path.clone(), t.rope.to_string()))
                 .collect();
-            app.lsp.restart(key, &open_files);
+            // If the server was never started (e.g. binary missing), try starting it
+            // fresh using any open file of the matching type as the root hint.
+            if !app.lsp.is_running(key) {
+                let hint = open_files.iter()
+                    .find(|(p, _)| app.lsp.expected_for(p) == Some(key))
+                    .map(|(p, _)| p.clone());
+                if let Some(path) = hint {
+                    app.lsp.start_for_path(key, &path);
+                    for (p, text) in &open_files {
+                        app.lsp.open(p, text);
+                    }
+                }
+            } else {
+                app.lsp.restart(key, &open_files);
+            }
         }
         popup::LspAction::RestartAll => {
             let open_files: Vec<(std::path::PathBuf, String)> = app

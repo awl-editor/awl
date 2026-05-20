@@ -108,7 +108,7 @@ impl LspManager {
         let Some(lang) = lang_id(path) else { return };
         let Some(key)  = server_key(lang) else { return };
         if !self.clients.contains_key(key) {
-            let root = find_root(path);
+            let root = find_root(key, path);
             if let Some(client) = LspClient::start(key, &root) {
                 self.clients.insert(key, client);
             }
@@ -210,6 +210,25 @@ impl LspManager {
     /// Keys of all currently running language servers.
     pub fn running(&self) -> Vec<&'static str> {
         self.clients.keys().copied().collect()
+    }
+
+    /// The server key that *should* handle `path`, whether or not it is running.
+    pub fn expected_for(&self, path: &Path) -> Option<&'static str> {
+        lang_id(path).and_then(|l| server_key(l))
+    }
+
+    pub fn is_running(&self, key: &str) -> bool {
+        self.clients.contains_key(key)
+    }
+
+    /// Attempt to start a server for `key` using `path` to locate the project root.
+    /// No-op if the server is already running.
+    pub fn start_for_path(&mut self, key: &'static str, path: &Path) {
+        if self.clients.contains_key(key) { return; }
+        let root = find_root(key, path);
+        if let Some(client) = LspClient::start(key, &root) {
+            self.clients.insert(key, client);
+        }
     }
 
     /// Last N log lines captured from a server's stderr.
@@ -522,6 +541,7 @@ fn reader_thread(
 ) {
     let mut reader = BufReader::new(stdout);
     let mut legend: Vec<String> = Vec::new();
+    let mut mod_legend: Vec<String> = Vec::new();
 
     loop {
         let mut content_length: Option<usize> = None;
@@ -539,7 +559,7 @@ fn reader_thread(
         if std::io::Read::read_exact(&mut reader, &mut body).is_err() { return; }
         let Ok(val) = serde_json::from_slice::<Value>(&body) else { continue };
 
-        dispatch(&val, &tx, &writer_tx, &pending, &hover_pending, &goto_pending, &rename_pending, &code_action_pending, &completion_pending, &mut legend);
+        dispatch(&val, &tx, &writer_tx, &pending, &hover_pending, &goto_pending, &rename_pending, &code_action_pending, &completion_pending, &mut legend, &mut mod_legend);
     }
 }
 
@@ -554,6 +574,7 @@ fn dispatch(
     code_action_pending: &Arc<Mutex<HashMap<i64, (PathBuf, u32, u32)>>>,
     completion_pending: &Arc<Mutex<HashMap<i64, (PathBuf, u32, u32)>>>,
     legend: &mut Vec<String>,
+    mod_legend: &mut Vec<String>,
 ) {
     let id = val.get("id").and_then(|v| v.as_i64());
 
@@ -570,6 +591,14 @@ fn dispatch(
                         .filter_map(|t| t.as_str().map(|s| s.to_string()))
                         .collect();
                 }
+                if let Some(mods) = result
+                    .pointer("/capabilities/semanticTokensProvider/legend/tokenModifiers")
+                    .and_then(|t| t.as_array())
+                {
+                    *mod_legend = mods.iter()
+                        .filter_map(|t| t.as_str().map(|s| s.to_string()))
+                        .collect();
+                }
                 let init_notif = json!({
                     "jsonrpc": "2.0", "method": "initialized", "params": {}
                 }).to_string();
@@ -581,7 +610,7 @@ fn dispatch(
             let path = pending.lock().ok().and_then(|mut p| p.remove(&id));
             if let Some(path) = path {
                 if let Some(data) = result.get("data").and_then(|d| d.as_array()) {
-                    let tokens = decode_tokens(data, legend);
+                    let tokens = decode_tokens(data, legend, mod_legend);
                     let _ = tx.send(ServerMessage::SemanticTokens { path, tokens });
                 }
                 return;
@@ -670,10 +699,15 @@ fn dispatch(
 }
 
 /// Decode the delta-encoded flat token array using the server's legend.
-fn decode_tokens(data: &[Value], legend: &[String]) -> Vec<SemanticToken> {
+fn decode_tokens(data: &[Value], legend: &[String], mod_legend: &[String]) -> Vec<SemanticToken> {
     let nums: Vec<u32> = data.iter()
         .filter_map(|v| v.as_u64().map(|n| n as u32))
         .collect();
+
+    // Find the bit position of the "defaultLibrary" modifier once.
+    let default_library_bit: Option<u32> = mod_legend.iter()
+        .position(|m| m == "defaultLibrary")
+        .map(|i| 1u32 << i);
 
     let mut tokens = Vec::new();
     let mut line: u32 = 0;
@@ -681,7 +715,7 @@ fn decode_tokens(data: &[Value], legend: &[String]) -> Vec<SemanticToken> {
 
     for chunk in nums.chunks(5) {
         if chunk.len() < 5 { break; }
-        let (delta_line, delta_col, length, type_idx, _modifiers) =
+        let (delta_line, delta_col, length, type_idx, modifiers) =
             (chunk[0], chunk[1], chunk[2], chunk[3] as usize, chunk[4]);
 
         if delta_line > 0 {
@@ -691,13 +725,17 @@ fn decode_tokens(data: &[Value], legend: &[String]) -> Vec<SemanticToken> {
             col  += delta_col;
         }
 
-        let token_type = legend.get(type_idx)
-            .cloned()
-            .unwrap_or_default();
+        let base_type = legend.get(type_idx).map(|s| s.as_str()).unwrap_or("");
+        if base_type.is_empty() { continue; }
 
-        if !token_type.is_empty() {
-            tokens.push(SemanticToken { line, col_start: col, col_end: col + length, token_type });
-        }
+        let is_default_library = default_library_bit.map(|bit| modifiers & bit != 0).unwrap_or(false);
+        let token_type = if is_default_library {
+            format!("{}.defaultLibrary", base_type)
+        } else {
+            base_type.to_string()
+        };
+
+        tokens.push(SemanticToken { line, col_start: col, col_end: col + length, token_type });
     }
     tokens
 }
@@ -900,9 +938,16 @@ fn initialize_msg(id: i64, root: &Path) -> Value {
                     "codeAction": {
                         "codeActionLiteralSupport": {
                             "codeActionKind": {
-                                "valueSet": ["", "quickfix", "refactor", "refactor.extract",
-                                             "refactor.inline", "refactor.rewrite",
-                                             "source", "source.organizeImports"]
+                                "valueSet": [
+                                    "", 
+                                    "quickfix", 
+                                    "refactor",
+                                    "refactor.extract",     
+                                    "refactor.inline", 
+                                    "refactor.rewrite",
+                                    "source", 
+                                    "source.organizeImports"
+                                ]
                             }
                         }
                     }
@@ -922,17 +967,40 @@ fn uri_to_path(uri: &str) -> Option<PathBuf> {
     uri.strip_prefix("file://").map(PathBuf::from)
 }
 
-fn find_root(path: &Path) -> PathBuf {
-    static MARKERS: &[&str] = &[
-        ".clangd", "compile_commands.json", "CMakeLists.txt",
-        "Cargo.toml", "package.json",
-        "pyproject.toml", "setup.py", "setup.cfg",
-        "go.mod", ".git",
-    ];
+fn find_root(key: &str, path: &Path) -> PathBuf {
+    // Primary markers specific to this server.
+    let primary: &[&str] = match key {
+        "clangd"                     => &[".clangd", "compile_commands.json", "CMakeLists.txt"],
+        "rust-analyzer"              => &["Cargo.toml"],
+        "typescript-language-server" => &["tsconfig.json", "jsconfig.json", "package.json"],
+        "pylsp"                      => &["pyproject.toml", "setup.py", "setup.cfg"],
+        "gopls"                      => &["go.mod"],
+        "lua-language-server"        => &[".luarc.json"],
+        "zls"                        => &["build.zig"],
+        "neocmakelsp"                => &["CMakeLists.txt", "CMakePresets.json"],
+        _                            => &[],
+    };
+    // Fallback: generic VCS roots.
+    static FALLBACK: &[&str] = &[".git", ".hg"];
+
     let start = path.parent().unwrap_or(path);
     let mut dir = start;
+
+    // First pass: language-specific markers.
     loop {
-        if MARKERS.iter().any(|m| dir.join(m).exists()) {
+        if primary.iter().any(|m| dir.join(m).exists()) {
+            return dir.to_path_buf();
+        }
+        match dir.parent() {
+            Some(p) => dir = p,
+            None    => break,
+        }
+    }
+
+    // Second pass: VCS root.
+    dir = start;
+    loop {
+        if FALLBACK.iter().any(|m| dir.join(m).exists()) {
             return dir.to_path_buf();
         }
         match dir.parent() {
@@ -943,20 +1011,24 @@ fn find_root(path: &Path) -> PathBuf {
 }
 
 pub fn lang_id(path: &Path) -> Option<&'static str> {
+    if path.file_name().and_then(|n| n.to_str()) == Some("CMakeLists.txt") {
+        return Some("cmake");
+    }
     match path.extension()?.to_str()? {
         "rs"                                   => Some("rust"),
         "py" | "pyw"                           => Some("python"),
-        "js" | "mjs" | "cjs"                  => Some("javascript"),
+        "js" | "mjs" | "cjs"                   => Some("javascript"),
         "ts"                                   => Some("typescript"),
         "tsx"                                  => Some("typescriptreact"),
         "jsx"                                  => Some("javascriptreact"),
         "c" | "h"                              => Some("c"),
-        "cpp" | "cc" | "cxx" | "hpp" | "hxx"  => Some("cpp"),
+        "cpp" | "cc" | "cxx" | "hpp" | "hxx"   => Some("cpp"),
         "go"                                   => Some("go"),
         "lua"                                  => Some("lua"),
-        "sh" | "bash" | "zsh"                 => Some("shellscript"),
+        "sh" | "bash" | "zsh"                  => Some("shellscript"),
         "nix"                                  => Some("nix"),
         "zig"                                  => Some("zig"),
+        "cmake"                                => Some("cmake"),
         _                                      => None,
     }
 }
@@ -965,11 +1037,12 @@ fn server_key(lang: &str) -> Option<&'static str> {
     match lang {
         "c" | "cpp"                                                          => Some("clangd"),
         "rust"                                                               => Some("rust-analyzer"),
-        "typescript" | "typescriptreact" | "javascript" | "javascriptreact" => Some("typescript-language-server"),
+        "typescript" | "typescriptreact" | "javascript" | "javascriptreact"  => Some("typescript-language-server"),
         "python"                                                             => Some("pylsp"),
         "go"                                                                 => Some("gopls"),
         "lua"                                                                => Some("lua-language-server"),
         "zig"                                                                => Some("zls"),
+        "cmake"                                                              => Some("neocmakelsp"),
         _                                                                    => None,
     }
 }
@@ -983,6 +1056,7 @@ fn server_command(key: &str) -> Option<(&'static str, &'static [&'static str])> 
         "gopls"                      => Some(("gopls",                      &[])),
         "lua-language-server"        => Some(("lua-language-server",        &[])),
         "zls"                        => Some(("zls",                        &[])),
+        "neocmakelsp"                => Some(("neocmakelsp",                &["stdio"])),
         _                            => None,
     }
 }
