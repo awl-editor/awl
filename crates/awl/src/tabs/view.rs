@@ -1,4 +1,5 @@
-use ui::buffer::Buffer;
+use buffer::Buffer;
+use ui::buffer::Buffer as UiBuffer;
 use ui::cell::{Cell, Color};
 use ui::layout::Layout;
 
@@ -9,7 +10,65 @@ use crate::theme::*;
 
 pub const NAV_WIDTH: u16 = 7; // " ← " (3) + " → " (3) + "│" (1)
 
-pub fn draw_tabbar(buf: &mut Buffer, app: &App, layout: &Layout) {
+/// Width (in terminal columns) that tab `i` occupies in the tab bar.
+/// Formula: space(1) + icon(1) + space(1) + name + modified_dot(0|2) + close(3) + separator(0|1).
+pub fn tab_display_width(tab: &Buffer, i: usize, n_tabs: usize) -> usize {
+    let name = tab_name(tab);
+    let dot = if tab.modified { 2 } else { 0 };
+    let sep = if i + 1 < n_tabs { 1 } else { 0 };
+    6 + name.len() + dot + sep
+}
+
+/// Adjust `app.tab_scroll` so the active tab is always within the visible region.
+pub fn ensure_active_tab_visible(app: &mut App, available: usize) {
+    let n = app.tabs.len();
+    if n == 0 {
+        app.tab_scroll = 0;
+        return;
+    }
+    let active = app.active_tab.min(n - 1);
+    if active < app.tab_scroll {
+        app.tab_scroll = active;
+        return;
+    }
+    // Advance tab_scroll right until active fits within the available width.
+    while app.tab_scroll < active {
+        let x: usize = (app.tab_scroll..=active).map(|i| tab_display_width(&app.tabs[i], i, n)).sum();
+        if x <= available {
+            break;
+        }
+        app.tab_scroll += 1;
+    }
+}
+
+/// Returns the tab index whose × close button is at screen position (x, y), or None.
+pub fn tab_close_at(app: &App, layout: &Layout, x: u16, y: u16) -> Option<usize> {
+    if y != layout.tab_bar.y || x < layout.tab_bar.x + NAV_WIDTH {
+        return None;
+    }
+    let n = app.tabs.len();
+    let max_x = layout.tab_bar.x + layout.tab_bar.width;
+    let mut tx = layout.tab_bar.x + NAV_WIDTH;
+    for (i, tab) in app.tabs.iter().enumerate().skip(app.tab_scroll) {
+        if tx >= max_x {
+            break;
+        }
+        let name = tab_name(tab);
+        let dot: u16 = if tab.modified { 2 } else { 0 };
+        let tab_w = 6 + name.len() as u16 + dot;
+        let close_x = tx + 4 + name.len() as u16 + dot;
+        if x >= tx && x < tx + tab_w {
+            return if x == close_x { Some(i) } else { None };
+        }
+        tx += tab_w;
+        if i + 1 < n {
+            tx += 1;
+        }
+    }
+    None
+}
+
+pub fn draw_tabbar(buf: &mut UiBuffer, app: &App, layout: &Layout) {
     buf.fill(layout.tab_bar, Cell::new(' ', fg(), bg_tab()));
     let ty = layout.tab_bar.y;
     let max_x = layout.tab_bar.x + layout.tab_bar.width;
@@ -26,7 +85,7 @@ pub fn draw_tabbar(buf: &mut Buffer, app: &App, layout: &Layout) {
     }
 
     let mut x = layout.tab_bar.x + NAV_WIDTH;
-    for (i, tab) in app.tabs.iter().enumerate() {
+    for (i, tab) in app.tabs.iter().enumerate().skip(app.tab_scroll) {
         if x >= max_x {
             break;
         }
@@ -69,7 +128,8 @@ pub fn draw_tabbar(buf: &mut Buffer, app: &App, layout: &Layout) {
         }
 
         if x + 2 < max_x {
-            buf.write_str(x, ty, " × ", fg_dim(), bg);
+            let close_fg = if app.hovered_close == Some(i) { diag_error() } else { fg_dim() };
+            buf.write_str(x, ty, " × ", close_fg, bg);
             x += 3;
         }
 

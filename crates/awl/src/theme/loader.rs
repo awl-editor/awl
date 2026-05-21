@@ -98,6 +98,9 @@ constant_color = "#ce9178"
 [tabs]
 modified_dot = "#e5c07b"
 active_fg    = "#ffffff"
+
+[explorer]
+folder = "#828282"
 "##;
 
 // ── Color parsing ─────────────────────────────────────────────────────────────
@@ -140,6 +143,8 @@ pub struct ThemeFile {
     pub breadcrumb: BreadcrumbFile,
     #[serde(default)]
     pub tabs: TabsFile,
+    #[serde(default)]
+    pub explorer: ExplorerFile,
 }
 
 #[derive(Deserialize, Default)]
@@ -254,9 +259,12 @@ pub struct TabsFile {
     pub active_fg: Option<String>,
 }
 
-// ── Theme loading ─────────────────────────────────────────────────────────────
+#[derive(Deserialize, Default)]
+pub struct ExplorerFile {
+    pub folder: Option<String>,
+}
 
-/// Load the default built-in theme.
+/// load the default built-in theme
 pub fn load_default() -> Theme {
     let file: ThemeFile = toml::from_str(DEFAULT_THEME_TOML).expect("embedded default theme is malformed");
     Theme::try_from(file).expect("embedded default theme has invalid colors")
@@ -409,6 +417,7 @@ impl TryFrom<ThemeFile> for Theme {
                 constant_color: c!(f.breadcrumb.constant_color),
             },
             tabs: TabsTheme { modified_dot: c!(f.tabs.modified_dot), active_fg: c!(f.tabs.active_fg) },
+            explorer: ExplorerTheme { folder: c!(f.explorer.folder) },
         })
     }
 }

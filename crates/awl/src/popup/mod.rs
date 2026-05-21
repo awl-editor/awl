@@ -6,6 +6,7 @@ pub mod card;
 pub mod context;
 pub mod dialog;
 pub mod finder;
+pub mod finder_events;
 
 #[derive(Clone, Copy, Debug)]
 pub enum MenuAction {
@@ -361,6 +362,33 @@ impl EditorContextMenu {
     pub fn hit(&self, mx: u16, my: u16) -> Option<usize> {
         let idx = popup_hit_row(mx, my, self.x, self.y, self.width(), self.height())?;
         self.items.get(idx).and_then(|i| if i.is_sep() { None } else { Some(idx) })
+    }
+
+    pub fn move_up(&mut self) {
+        let start = self.hovered.unwrap_or(self.items.len());
+        let mut i = start;
+        loop {
+            if i == 0 {
+                return;
+            }
+            i -= 1;
+            if !self.items[i].is_sep() {
+                self.hovered = Some(i);
+                return;
+            }
+        }
+    }
+
+    pub fn move_down(&mut self) {
+        let start = self.hovered.map(|h| h + 1).unwrap_or(0);
+        let mut i = start;
+        while i < self.items.len() {
+            if !self.items[i].is_sep() {
+                self.hovered = Some(i);
+                return;
+            }
+            i += 1;
+        }
     }
 }
 

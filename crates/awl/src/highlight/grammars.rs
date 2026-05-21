@@ -29,7 +29,7 @@ pub(super) fn highlight_color(idx: usize) -> Color {
         Some(&"markup.heading") => theme::syntax_type(),
         Some(&"markup.bold") => theme::syntax_variable(),
         Some(&"markup.italic") => theme::syntax_string(),
-        Some(&"markup.strikethrough") => Color::rgb(128, 128, 128),
+        Some(&"markup.strikethrough") => theme::syntax_comment(),
         Some(&"markup.link") => theme::syntax_constant(),
         Some(&"markup.raw") => theme::syntax_string(),
         Some(&"markup.list") => theme::syntax_keyword(),

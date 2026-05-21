@@ -102,6 +102,8 @@ pub struct App {
     pub last_mouse_pos: (u16, u16),
     pub card_dragging: bool,
     pub match_cache: Option<MatchCache>,
+    pub tab_scroll: usize,
+    pub hovered_close: Option<usize>,
 }
 
 impl App {
@@ -184,6 +186,8 @@ impl App {
             last_mouse_pos: (0, 0),
             card_dragging: false,
             match_cache: None,
+            tab_scroll: 0,
+            hovered_close: None,
         }
     }
 
@@ -350,7 +354,7 @@ impl App {
             }
             self.tabs.push(buf);
             self.active_tab = self.tabs.len() - 1;
-            self.editor_focused = false;
+            self.editor_focused = true;
         }
     }
 

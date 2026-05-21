@@ -117,13 +117,36 @@ pub fn handle_editor_context_menu(app: &mut App, event: &Event, eh: usize, ew: u
             app.editor_context_menu = None;
             (true, false)
         }
+        Event::Key(Key::Up) => {
+            if let Some(menu) = &mut app.editor_context_menu {
+                menu.move_up();
+            }
+            (true, true)
+        }
+        Event::Key(Key::Down) => {
+            if let Some(menu) = &mut app.editor_context_menu {
+                menu.move_down();
+            }
+            (true, true)
+        }
+        Event::Key(Key::Char('\n')) | Event::Key(Key::Char('\r')) => {
+            let action_info = app.editor_context_menu.as_ref().and_then(|m| {
+                m.hovered.and_then(|i| m.items[i].action).map(|a| (a, m.buf_row, m.buf_col))
+            });
+            app.editor_context_menu = None;
+            if let Some((a, row, col)) = action_info {
+                execute_editor_menu_action(app, a, row, col, eh, ew);
+                crate::git::drain_git_refresh(app, tx);
+            }
+            (true, true)
+        }
         Event::Mouse(MouseEvent::Press(MouseButton::Left, mx, my)) => {
             let (x, y) = (mx - 1, my - 1);
             let click_info = app.editor_context_menu.as_ref().and_then(|m| m.hit(x, y).and_then(|i| m.items[i].action).map(|a| (a, m.buf_row, m.buf_col)));
             app.editor_context_menu = None;
             if let Some((a, row, col)) = click_info {
                 execute_editor_menu_action(app, a, row, col, eh, ew);
-                super::drain_git_refresh(app, tx);
+                crate::git::drain_git_refresh(app, tx);
             }
             (true, false)
         }
@@ -281,7 +304,7 @@ pub fn handle_tab_context_menu(app: &mut App, event: &Event, h: u16, tx: &mpsc::
             app.tab_context_menu = None;
             if let Some((action, tab_idx)) = info {
                 execute_tab_menu_action(app, action, tab_idx, h);
-                super::drain_git_refresh(app, tx);
+                crate::git::drain_git_refresh(app, tx);
             }
             (true, true)
         }

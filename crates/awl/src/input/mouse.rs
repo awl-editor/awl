@@ -80,15 +80,15 @@ pub fn handle_click(app: &mut App, layout: &Layout, x: u16, y: u16, h: u16, eh: 
 
         let max_x = layout.tab_bar.x + layout.tab_bar.width;
         let mut tx = layout.tab_bar.x + NAV_WIDTH;
-        for (i, tab) in app.tabs.iter().enumerate() {
+        for (i, tab) in app.tabs.iter().enumerate().skip(app.tab_scroll) {
             if tx >= max_x {
                 break;
             }
             let name = tab_name(tab);
             let dot_len: u16 = if tab.modified { 2 } else { 0 };
-            let extra: u16 = if i == app.active_tab { 1 } else { 0 };
-            let tab_width = extra + 1 + 1 + name.len() as u16 + dot_len + 3;
-            let close_x = tx + extra + 1 + 1 + name.len() as u16 + dot_len + 1;
+            // space(1) + icon(1) + space(1) + name + dot + close(3) — matches draw_tabbar exactly
+            let tab_width = 6 + name.len() as u16 + dot_len;
+            let close_x = tx + 4 + name.len() as u16 + dot_len;
             if x >= tx && x < tx + tab_width {
                 if x == close_x {
                     if app.tabs.get(i).map(|t| !t.virtual_tab && t.modified).unwrap_or(false) {

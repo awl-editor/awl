@@ -15,6 +15,7 @@ pub struct Theme {
     pub finder: FinderTheme,
     pub breadcrumb: BreadcrumbTheme,
     pub tabs: TabsTheme,
+    pub explorer: ExplorerTheme,
 }
 
 pub struct EditorTheme {
@@ -117,6 +118,10 @@ pub struct BreadcrumbTheme {
 pub struct TabsTheme {
     pub modified_dot: Color,
     pub active_fg: Color,
+}
+
+pub struct ExplorerTheme {
+    pub folder: Color,
 }
 
 // ── Global singleton ──────────────────────────────────────────────────────────
@@ -371,4 +376,9 @@ pub fn tab_modified_dot() -> Color {
 }
 pub fn tab_active_fg() -> Color {
     get().tabs.active_fg
+}
+
+// Explorer
+pub fn explorer_folder() -> Color {
+    get().explorer.folder
 }

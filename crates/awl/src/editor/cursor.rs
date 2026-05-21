@@ -94,6 +94,11 @@ pub fn pointer_shape_for(app: &App, mx: u16, my: u16, w: u16, h: u16) -> Pointer
         return PointerShape::Default;
     }
 
+    // Tab bar → Pointer (tabs are clickable; × is tracked separately for the red highlight).
+    if !app.minimal_mode && my == layout.tab_bar.y && mx >= layout.tab_bar.x && layout.tab_bar.width > 0 {
+        return PointerShape::Pointer;
+    }
+
     // Breadcrumb row → Pointer.
     if my == layout.breadcrumb.y && mx >= layout.breadcrumb.x && layout.breadcrumb.width > 0 {
         return PointerShape::Pointer;

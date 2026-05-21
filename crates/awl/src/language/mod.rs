@@ -1,3 +1,5 @@
+pub mod lsp_dispatch;
+
 use crate::app::App;
 use crate::highlight;
 use crate::popup::{self, CardLine};

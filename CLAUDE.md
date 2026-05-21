@@ -45,7 +45,7 @@ The binary crate. Owns the main event loop, application state, and all user-faci
 | `statusbar/` | Status-bar rendering: diagnostics, LSP indicator, cursor position, status message |
 | `swap/` | Crash-recovery swap files under `~/.cache/awl/swap/` |
 | `tabs/` | Tab-bar rendering, tab naming |
-| `theme/` | Global color palette |
+| `theme/` | Global color palette; `loader.rs` parses TOML theme files and exposes free-function color accessors |
 
 ### `crates/editor` — Buffer & Editing
 
@@ -197,6 +197,38 @@ The renderer delta-compares every cell before emitting escape sequences. Highlig
 
 ---
 
+## Themes
+
+Theme files live in `themes/` at the repo root and are checked into source control. The active theme is set by an absolute path in `~/.config/awl/config.toml`:
+
+```toml
+theme = "/home/shdw/Development/awl/themes/default.toml"
+```
+
+**Available themes:**
+
+| File | Description |
+|---|---|
+| `themes/default.toml` | VSCode Dark+ inspired (the built-in default) |
+| `themes/catppuccin_mauve.toml` | Catppuccin Mocha with Mauve accent |
+| `themes/gruvbox.toml` | Gruvbox Dark |
+
+**How the theme system works:**
+
+- `theme/mod.rs` defines typed structs (`EditorTheme`, `SyntaxTheme`, `ExplorerTheme`, etc.) and a global `OnceLock<Theme>` singleton initialised once at startup via `theme::init()`.
+- All rendering code calls free-function accessors (`theme::fg()`, `theme::syntax_keyword()`, `theme::explorer_folder()`, etc.) — never hardcoded `Color::rgb` values.
+- `theme/loader.rs` embeds `DEFAULT_THEME_TOML` as the merge baseline. When a theme file is loaded, user values are deep-merged on top of that baseline, so partial theme files are valid.
+- File-type icon colors in `explorer/icons.rs` are intentionally hardcoded per file type (language brand colors). Only the folder icon color routes through the theme (`theme::explorer_folder()`).
+
+**Adding a new theme color:**
+1. Add a field to the relevant `*Theme` struct in `theme/mod.rs` and a free-function accessor.
+2. Add the corresponding `Option<String>` field to the matching `*File` DTO in `theme/loader.rs`.
+3. Add a default hex value to `DEFAULT_THEME_TOML` in `loader.rs`.
+4. Wire the field into `TryFrom<ThemeFile> for Theme`.
+5. Add the key to all three theme files in `themes/`.
+
+---
+
 ## Keeping This File Current
 
 **Update this file whenever the project structure changes.** Specifically:
@@ -206,5 +238,6 @@ The renderer delta-compares every cell before emitting escape sequences. Highlig
 - A module is renamed, split, or removed → update every reference.
 - A new language server is added to `lsp/src/lang.rs` → update the supported-servers list.
 - A new technology dependency is introduced → add it to the technology table with a rationale.
+- A new theme color is added → follow the five-step checklist in the Themes section and update all three theme files.
 
 The goal is that a model reading this file should be able to locate any concept in the codebase without searching.

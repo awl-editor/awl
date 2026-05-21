@@ -1,0 +1,97 @@
+# Catppuccin Mocha — Mauve accent
+# https://github.com/catppuccin/catppuccin
+
+[editor]
+bg_main      = "#1e1e2e"
+bg_dark      = "#181825"
+bg_tab       = "#313244"
+bg_cursor    = "#28283e"
+bg_sel       = "#36294f"
+bg_select    = "#443a66"
+bg_match     = "#45475a"
+fg           = "#cdd6f4"
+fg_dim       = "#7f849c"
+divider      = "#45475a"
+guide        = "#313244"
+guide_active = "#6c7086"
+
+[scrollbar]
+track = "#1e1e2e"
+thumb = "#585b70"
+
+[statusbar]
+branch_bg = "#59407f"
+lsp_bg    = "#403164"
+file_bg   = "#181825"
+fg        = "#cdd6f4"
+fg_dim    = "#7f849c"
+powerline = ""
+
+[popup]
+bg       = "#313244"
+border   = "#585b70"
+hover    = "#50417a"
+hover_fg = "#cdd6f4"
+link     = "#89b4fa"
+
+[syntax]
+keyword  = "#cba6f7"
+string   = "#a6e3a1"
+comment  = "#6c7086"
+number   = "#fab387"
+function = "#89b4fa"
+type_    = "#94e2d5"
+constant = "#fab387"
+variable = "#cdd6f4"
+property = "#b4befe"
+operator = "#9399b2"
+default  = "#cdd6f4"
+
+[git]
+added     = "#a6e3a1"
+modified  = "#f9e2af"
+deleted   = "#f38ba8"
+renamed   = "#cba6f7"
+untracked = "#a6e3a1"
+conflict  = "#f38ba8"
+ignored   = "#6c7086"
+
+[diagnostics]
+error      = "#f38ba8"
+warning    = "#f9e2af"
+info       = "#89b4fa"
+error_bg   = "#7d3a4a"
+warning_bg = "#7d6530"
+
+[finder]
+accent          = "#cba6f7"
+sel_bg          = "#36294f"
+match_bg        = "#2a2040"
+match_fg        = "#f5c2e7"
+row_alt_bg      = "#252535"
+title_fg        = "#b4befe"
+input_sel_bg    = "#443a66"
+title_query_fg  = "#cba6f7"
+error_fg        = "#f38ba8"
+text_dim        = "#6c7086"
+file_dim        = "#bac2de"
+lnum_sel        = "#f9e2af"
+sep_sel         = "#7d6530"
+sep_dim         = "#45475a"
+text_sel        = "#cdd6f4"
+file_sel        = "#b4befe"
+file_sel_dim    = "#6c7086"
+
+[breadcrumb]
+type_color     = "#94e2d5"
+function_color = "#89b4fa"
+field_color    = "#b4befe"
+variable_color = "#9399b2"
+constant_color = "#fab387"
+
+[tabs]
+modified_dot = "#f9e2af"
+active_fg    = "#cdd6f4"
+
+[explorer]
+folder = "#89b4fa"

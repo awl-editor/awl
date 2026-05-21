@@ -1,0 +1,96 @@
+# Default dark theme (VSCode Dark+ inspired)
+
+[editor]
+bg_main      = "#1e1e1e"
+bg_dark      = "#252526"
+bg_tab       = "#2d2d2d"
+bg_cursor    = "#2a2d2e"
+bg_sel       = "#094771"
+bg_select    = "#264f78"
+bg_match     = "#3c3c41"
+fg           = "#d4d4d4"
+fg_dim       = "#858585"
+divider      = "#3c3c3c"
+guide        = "#4b4b4b"
+guide_active = "#9b9b9b"
+
+[scrollbar]
+track = "#1e1e1e"
+thumb = "#505050"
+
+[statusbar]
+branch_bg = "#0066aa"
+lsp_bg    = "#4b0082"
+file_bg   = "#252526"
+fg        = "#dcdcdc"
+fg_dim    = "#8c8c8c"
+powerline = ""
+
+[popup]
+bg       = "#2c2c2e"
+border   = "#58585f"
+hover    = "#094771"
+hover_fg = "#ffffff"
+link     = "#61afef"
+
+[syntax]
+keyword  = "#569cd6"
+string   = "#ce9178"
+comment  = "#6a9955"
+number   = "#b5cea8"
+function = "#dcdcaa"
+type_    = "#4ec9b0"
+constant = "#4fc1ff"
+variable = "#9cdcfe"
+property = "#9cdcfe"
+operator = "#d4d4d4"
+default  = "#d4d4d4"
+
+[git]
+added     = "#98c379"
+modified  = "#e5c07b"
+deleted   = "#e06c75"
+renamed   = "#e5c07b"
+untracked = "#98c379"
+conflict  = "#e06c75"
+ignored   = "#787878"
+
+[diagnostics]
+error      = "#e06c75"
+warning    = "#e5c07b"
+info       = "#569cd6"
+error_bg   = "#b45a64"
+warning_bg = "#b4965a"
+
+[finder]
+accent          = "#e69b37"
+sel_bg          = "#38321c"
+match_bg        = "#483e14"
+match_fg        = "#ffdc96"
+row_alt_bg      = "#28282a"
+title_fg        = "#afaac3"
+input_sel_bg    = "#4664b4"
+title_query_fg  = "#afa078"
+error_fg        = "#c86464"
+text_dim        = "#646973"
+file_dim        = "#c8c8cd"
+lnum_sel        = "#beaa78"
+sep_sel         = "#73643c"
+sep_dim         = "#464852"
+text_sel        = "#a5a8b2"
+file_sel        = "#96875f"
+file_sel_dim    = "#5f6470"
+
+[breadcrumb]
+type_color     = "#4ec9b0"
+function_color = "#dcdcaa"
+field_color    = "#9cdcfe"
+variable_color = "#b3b3b3"
+constant_color = "#ce9178"
+
+[tabs]
+modified_dot = "#e5c07b"
+active_fg    = "#ffffff"
+
+[explorer]
+folder = "#828282"

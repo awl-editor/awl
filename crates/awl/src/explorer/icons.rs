@@ -1,3 +1,4 @@
+use crate::theme;
 use ui::cell::Color;
 
 /// Returns the Nerd Font glyph for a file/directory entry.
@@ -244,7 +245,7 @@ fn glyph_by_ext(name: &str) -> &'static str {
 /// Returns the foreground color for the icon.
 pub fn color(name: &str, is_dir: bool) -> Color {
     if is_dir {
-        return Color::rgb(130, 130, 130);
+        return theme::explorer_folder();
     }
     match name {
         "CMakeLists.txt" | ".clang-format" | ".clangd" | ".clang-tidy" | "compile_commands.json" => return Color::rgb(223, 102, 94),

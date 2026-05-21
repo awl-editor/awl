@@ -1,6 +1,10 @@
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::process::Command;
+use std::sync::mpsc;
+
+use crate::app::events::AppEvent;
+use crate::app::App;
 
 use ui::cell::Color;
 
@@ -123,6 +127,27 @@ fn parse(git_root: &Path) -> HashMap<PathBuf, Status> {
         map.insert(full, status);
     }
     map
+}
+
+pub fn spawn_git_refresh(root: PathBuf, tx: mpsc::Sender<AppEvent>) {
+    std::thread::spawn(move || {
+        let (git_root, git_branch, git_status) = load(&root);
+        let _ = tx.send(AppEvent::GitResult { git_root, git_branch, git_status });
+    });
+}
+
+pub fn spawn_file_diff_refresh(git_root: PathBuf, path: PathBuf, tx: mpsc::Sender<AppEvent>) {
+    std::thread::spawn(move || {
+        let diff = line_diff(&git_root, &path);
+        let _ = tx.send(AppEvent::FileDiffResult { path, diff });
+    });
+}
+
+pub fn drain_git_refresh(app: &mut App, tx: &mpsc::Sender<AppEvent>) {
+    if app.needs_git_refresh {
+        app.needs_git_refresh = false;
+        spawn_git_refresh(app.root.clone(), tx.clone());
+    }
 }
 
 fn propagate_to_dirs(mut map: HashMap<PathBuf, Status>, git_root: &Path) -> HashMap<PathBuf, Status> {
