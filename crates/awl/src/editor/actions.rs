@@ -9,19 +9,16 @@ pub fn word_at(b: &buffer::Buffer, row: usize, col: usize) -> String {
     let is_word = |c: char| c.is_alphanumeric() || c == '_';
     let mut start = col;
     let mut end = col;
-    while start > 0 && is_word(chars[start - 1]) { start -= 1; }
-    while end < chars.len() && is_word(chars[end]) { end += 1; }
+    while start > 0 && is_word(chars[start - 1]) {
+        start -= 1;
+    }
+    while end < chars.len() && is_word(chars[end]) {
+        end += 1;
+    }
     chars[start..end].iter().collect()
 }
 
-pub fn accept_completion(
-    app: &mut App,
-    item: lsp::CompletionItem,
-    word_start: usize,
-    buf_row: usize,
-    eh: usize,
-    ew: usize,
-) {
+pub fn accept_completion(app: &mut App, item: lsp::CompletionItem, word_start: usize, buf_row: usize, eh: usize, ew: usize) {
     if let Some(te) = item.text_edit {
         if let Some(b) = app.current_mut() {
             if te.start_line as usize == buf_row {
@@ -40,22 +37,15 @@ pub fn accept_completion(
     }
 }
 
-pub fn execute_editor_menu_action(
-    app: &mut App,
-    action: popup::EditorMenuAction,
-    menu_row: usize,
-    menu_col: usize,
-    eh: usize,
-    ew: usize,
-) {
+pub fn execute_editor_menu_action(app: &mut App, action: popup::EditorMenuAction, menu_row: usize, menu_col: usize, eh: usize, ew: usize) {
     use popup::EditorMenuAction::*;
     match action {
         GoToDefinition | GoToDeclaration | GoToTypeDefinition | GoToImplementation => {
             let kind = match action {
-                GoToDefinition     => lsp::GotoKind::Definition,
-                GoToDeclaration    => lsp::GotoKind::Declaration,
+                GoToDefinition => lsp::GotoKind::Definition,
+                GoToDeclaration => lsp::GotoKind::Declaration,
                 GoToTypeDefinition => lsp::GotoKind::TypeDefinition,
-                _                  => lsp::GotoKind::Implementation,
+                _ => lsp::GotoKind::Implementation,
             };
             if let Some(b) = app.current() {
                 let path = b.path.clone();
@@ -66,19 +56,18 @@ pub fn execute_editor_menu_action(
             if let Some(b) = app.current() {
                 let path = b.path.clone();
                 let word = word_at(b, menu_row, menu_col);
-                app.prompt = Some(popup::InputPrompt::rename_symbol(
-                    path,
-                    word,
-                    menu_row as u32,
-                    menu_col as u32,
-                ));
+                app.prompt = Some(popup::InputPrompt::rename_symbol(path, word, menu_row as u32, menu_col as u32));
             }
         }
         Cut => {
             if let Some(b) = app.current_mut() {
                 let text = b.selected_text().unwrap_or_else(|| b.line(b.cursor_row) + "\n");
                 set_clipboard(&text);
-                if b.selection_range().is_some() { b.delete_selection(); } else { b.delete_line(); }
+                if b.selection_range().is_some() {
+                    b.delete_selection();
+                } else {
+                    b.delete_line();
+                }
                 b.update_scroll(eh, ew);
             }
             app.set_status("Copied to clipboard", 2500, StatusLevel::Log);
@@ -93,7 +82,9 @@ pub fn execute_editor_menu_action(
         Paste => {
             let text = get_clipboard();
             if let Some(b) = app.current_mut() {
-                if b.selection_range().is_some() { b.delete_selection(); }
+                if b.selection_range().is_some() {
+                    b.delete_selection();
+                }
                 b.paste(&text);
                 b.update_scroll(eh, ew);
             }
@@ -106,8 +97,7 @@ pub fn execute_editor_menu_action(
             }
         }
         CodeAction(idx) => {
-            let data = app.pending_code_actions.get(idx)
-                .map(|a| (a.title.clone(), a.edit.clone()));
+            let data = app.pending_code_actions.get(idx).map(|a| (a.title.clone(), a.edit.clone()));
             if let Some((title, maybe_edit)) = data {
                 if let Some(edits) = maybe_edit {
                     apply_workspace_edits(app, edits, None);
@@ -121,11 +111,7 @@ pub fn execute_editor_menu_action(
     }
 }
 
-pub fn apply_workspace_edits(
-    app: &mut App,
-    edits: Vec<lsp::FileEdits>,
-    label: Option<String>,
-) {
+pub fn apply_workspace_edits(app: &mut App, edits: Vec<lsp::FileEdits>, label: Option<String>) {
     let mut to_sync: Vec<(std::path::PathBuf, String, i32)> = Vec::new();
 
     for file_edit in edits {
@@ -140,7 +126,7 @@ pub fn apply_workspace_edits(
             }
             for edit in &sorted {
                 let start = tab.rope.line_to_char(edit.start_line as usize) + edit.start_col as usize;
-                let end   = tab.rope.line_to_char(edit.end_line as usize)   + edit.end_col as usize;
+                let end = tab.rope.line_to_char(edit.end_line as usize) + edit.end_col as usize;
                 tab.rope.remove(start..end);
                 tab.rope.insert(start, &edit.new_text);
             }
@@ -152,7 +138,7 @@ pub fn apply_workspace_edits(
                 let mut rope = ropey::Rope::from_str(&text);
                 for edit in &sorted {
                     let start = rope.line_to_char(edit.start_line as usize) + edit.start_col as usize;
-                    let end   = rope.line_to_char(edit.end_line as usize)   + edit.end_col as usize;
+                    let end = rope.line_to_char(edit.end_line as usize) + edit.end_col as usize;
                     rope.remove(start..end);
                     rope.insert(start, &edit.new_text);
                 }

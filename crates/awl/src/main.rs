@@ -787,7 +787,9 @@ fn main() -> io::Result<()> {
                     let card_text = app.hover_card.as_ref().and_then(|card| {
                         let anchor = card.sel_anchor?;
                         let cursor = card.sel_cursor?;
-                        if anchor == cursor { return None; }
+                        if anchor == cursor {
+                            return None;
+                        }
                         let max_w = w.saturating_sub(4).min(100) as usize;
                         let wrapped = language::wrap_for_card(&card.lines, max_w);
                         Some(extract_card_selection(&wrapped, anchor, cursor))
@@ -1494,9 +1496,7 @@ fn main() -> io::Result<()> {
                                         .hover_card
                                         .as_ref()
                                         .and_then(|c| c.link_zones.iter().find(|&&(xs, xe, ly, _)| y == ly && x >= xs && x < xe).map(|(_, _, _, url)| url.clone()));
-                                    let in_card_bounds = app.hover_card.as_ref()
-                                        .map(|c| c.cw > 0 && x >= c.cx && x < c.cx + c.cw && y >= c.cy && y < c.cy + c.ch)
-                                        .unwrap_or(false);
+                                    let in_card_bounds = app.hover_card.as_ref().map(|c| c.cw > 0 && x >= c.cx && x < c.cx + c.cw && y >= c.cy && y < c.cy + c.ch).unwrap_or(false);
                                     if let Some(url) = card_link_hit {
                                         app.open_url_dialog = Some(popup::OpenUrlDialog { url });
                                     } else if in_card_bounds {
@@ -1555,15 +1555,17 @@ fn main() -> io::Result<()> {
                                     } else if y == layout.breadcrumb.y && x >= layout.breadcrumb.x {
                                         app.dragging_divider = false;
                                         app.dragging = false;
-                                        let anchor_x = app.current().map(|tab| {
-                                            let rel_len = tab.path.strip_prefix(&app.root)
-                                                .map(|p| p.to_string_lossy().chars().count())
-                                                .unwrap_or_else(|_| tab.path.file_name()
-                                                    .map(|n| n.to_string_lossy().chars().count())
-                                                    .unwrap_or(0));
-                                            (layout.breadcrumb.x + 1 + rel_len as u16 + 3)
-                                                .min(layout.breadcrumb.x + layout.breadcrumb.width.saturating_sub(1))
-                                        }).unwrap_or(layout.breadcrumb.x);
+                                        let anchor_x = app
+                                            .current()
+                                            .map(|tab| {
+                                                let rel_len = tab
+                                                    .path
+                                                    .strip_prefix(&app.root)
+                                                    .map(|p| p.to_string_lossy().chars().count())
+                                                    .unwrap_or_else(|_| tab.path.file_name().map(|n| n.to_string_lossy().chars().count()).unwrap_or(0));
+                                                (layout.breadcrumb.x + 1 + rel_len as u16 + 3).min(layout.breadcrumb.x + layout.breadcrumb.width.saturating_sub(1))
+                                            })
+                                            .unwrap_or(layout.breadcrumb.x);
                                         let syms = app.current().and_then(|b| app.document_symbols.get(&b.path));
                                         if let Some(syms) = syms {
                                             if !syms.is_empty() {
@@ -1631,7 +1633,9 @@ fn main() -> io::Result<()> {
                                         let mut tx2 = layout.tab_bar.x + tabs::view::NAV_WIDTH;
                                         let mut hit_tab: Option<usize> = None;
                                         for (i, tab) in app.tabs.iter().enumerate() {
-                                            if tx2 >= max_x { break; }
+                                            if tx2 >= max_x {
+                                                break;
+                                            }
                                             let name = tabs::naming::tab_name(tab);
                                             let dot_len: u16 = if tab.modified { 2 } else { 0 };
                                             let extra: u16 = if i == app.active_tab { 1 } else { 0 };
@@ -1641,7 +1645,9 @@ fn main() -> io::Result<()> {
                                                 break;
                                             }
                                             tx2 += tab_width;
-                                            if i + 1 < app.tabs.len() { tx2 += 1; }
+                                            if i + 1 < app.tabs.len() {
+                                                tx2 += 1;
+                                            }
                                         }
                                         if let Some(tab_idx) = hit_tab {
                                             let mut menu = popup::TabContextMenu::new(x, layout.tab_bar.y + 1, tab_idx);
@@ -2076,15 +2082,9 @@ fn main() -> io::Result<()> {
 }
 
 fn set_terminal_title<W: Write>(out: &mut W, app: &App) -> io::Result<()> {
-    let project = app.root
-        .file_name()
-        .and_then(|n| n.to_str())
-        .unwrap_or("awl");
+    let project = app.root.file_name().and_then(|n| n.to_str()).unwrap_or("awl");
     let title = if let Some(buf) = app.tabs.get(app.active_tab) {
-        let rel = buf.path
-            .strip_prefix(&app.root)
-            .unwrap_or(&buf.path)
-            .to_string_lossy();
+        let rel = buf.path.strip_prefix(&app.root).unwrap_or(&buf.path).to_string_lossy();
         format!("{} - {} L{}:{}", project, rel, buf.cursor_row + 1, buf.cursor_col + 1)
     } else {
         project.to_string()
@@ -2166,7 +2166,9 @@ fn spawn_search(query: String, regex: bool, root: std::path::PathBuf, tx: mpsc::
     std::thread::spawn(move || {
         let mut cmd = std::process::Command::new("rg");
         cmd.args(["--line-number", "--no-heading", "--color=never", "--smart-case", "--max-filesize=5M"]);
-        if !regex { cmd.arg("--fixed-strings"); }
+        if !regex {
+            cmd.arg("--fixed-strings");
+        }
         let output = cmd.arg(&query).arg(&root).output();
         let Ok(out) = output else { return };
         let stdout = String::from_utf8_lossy(&out.stdout);
@@ -2177,7 +2179,9 @@ fn spawn_search(query: String, regex: bool, root: std::path::PathBuf, tx: mpsc::
             let Some(line_str) = parts.next() else { continue };
             let text = parts.next().unwrap_or("").trim_start().to_string();
             let Ok(line_num) = line_str.parse::<usize>() else { continue };
-            if path_str.is_empty() { continue; }
+            if path_str.is_empty() {
+                continue;
+            }
             results.push(popup::FinderMatch { path: PathBuf::from(path_str), line_num, text });
         }
         let mode = if regex { FinderMode::ContentRegex } else { FinderMode::Content };
@@ -2275,11 +2279,15 @@ fn extract_card_selection(lines: &[popup::CardLine], anchor: (usize, usize), cur
     let (s, e) = if anchor <= cursor { (anchor, cursor) } else { (cursor, anchor) };
     let mut result = String::new();
     for line_idx in s.0..=e.0 {
-        if line_idx >= lines.len() { break; }
+        if line_idx >= lines.len() {
+            break;
+        }
         let chars: Vec<char> = lines[line_idx].text.chars().collect();
         let col_start = if line_idx == s.0 { s.1.min(chars.len()) } else { 0 };
         let col_end = if line_idx == e.0 { e.1.min(chars.len()) } else { chars.len() };
-        if !result.is_empty() { result.push('\n'); }
+        if !result.is_empty() {
+            result.push('\n');
+        }
         result.extend(chars[col_start..col_end].iter());
     }
     result

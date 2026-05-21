@@ -38,12 +38,12 @@ pub fn kind_glyph(kind: u8) -> &'static str {
 fn kind_color(kind: u8) -> Color {
     match kind {
         5 | 11 | 10 | 23 => breadcrumb_type(),
-        6 | 9 | 12       => breadcrumb_function(),
-        7 | 8            => breadcrumb_field(),
-        13               => breadcrumb_variable(),
-        14               => breadcrumb_constant(),
-        22               => breadcrumb_type(),
-        _                => fg_dim(),
+        6 | 9 | 12 => breadcrumb_function(),
+        7 | 8 => breadcrumb_field(),
+        13 => breadcrumb_variable(),
+        14 => breadcrumb_constant(),
+        22 => breadcrumb_type(),
+        _ => fg_dim(),
     }
 }
 

@@ -37,13 +37,6 @@ impl Cell {
 
 impl Default for Cell {
     fn default() -> Self {
-        Self {
-            ch: ' ',
-            fg: Color::rgb(200, 200, 200),
-            bg: Color::rgb(0, 0, 0),
-            bold: false,
-            underline: UnderlineStyle::None,
-            underline_color: None,
-        }
+        Self { ch: ' ', fg: Color::rgb(200, 200, 200), bg: Color::rgb(0, 0, 0), bold: false, underline: UnderlineStyle::None, underline_color: None }
     }
 }

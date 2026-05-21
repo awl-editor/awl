@@ -1,14 +1,10 @@
 use std::path::{Path, PathBuf};
 
 fn swap_dir() -> PathBuf {
-    let base = std::env::var_os("XDG_DATA_HOME")
-        .map(PathBuf::from)
-        .unwrap_or_else(|| {
-            let home = std::env::var_os("HOME")
-                .map(PathBuf::from)
-                .unwrap_or_else(|| PathBuf::from("."));
-            home.join(".local/share")
-        });
+    let base = std::env::var_os("XDG_DATA_HOME").map(PathBuf::from).unwrap_or_else(|| {
+        let home = std::env::var_os("HOME").map(PathBuf::from).unwrap_or_else(|| PathBuf::from("."));
+        home.join(".local/share")
+    });
     base.join("awl/swaps")
 }
 
@@ -23,10 +19,7 @@ fn path_hash(path: &Path) -> u64 {
 
 pub fn swap_path_for(file_path: &Path) -> PathBuf {
     let hash = path_hash(file_path);
-    let stem = file_path
-        .file_name()
-        .map(|n| n.to_string_lossy().into_owned())
-        .unwrap_or_else(|| "unnamed".to_string());
+    let stem = file_path.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_else(|| "unnamed".to_string());
     swap_dir().join(format!("{:016x}_{}.swp", hash, stem))
 }
 

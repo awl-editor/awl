@@ -6,9 +6,6 @@ mod protocol;
 mod threads;
 mod types;
 
-pub use types::{
-    LspDiagnostic, SemanticToken, GotoKind, LspTextEdit, FileEdits,
-    HoverSegment, CodeActionItem, CompletionItem, ServerMessage, DocumentSymbol,
-};
-pub use manager::LspManager;
 pub use lang::lang_id;
+pub use manager::LspManager;
+pub use types::{CodeActionItem, CompletionItem, DocumentSymbol, FileEdits, GotoKind, HoverSegment, LspDiagnostic, LspTextEdit, SemanticToken, ServerMessage};

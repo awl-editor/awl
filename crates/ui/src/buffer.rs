@@ -9,11 +9,7 @@ pub struct Buffer {
 
 impl Buffer {
     pub fn new(width: u16, height: u16) -> Self {
-        Self {
-            width,
-            height,
-            cells: vec![Cell::default(); width as usize * height as usize],
-        }
+        Self { width, height, cells: vec![Cell::default(); width as usize * height as usize] }
     }
 
     fn idx(&self, x: u16, y: u16) -> usize {

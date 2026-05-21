@@ -11,11 +11,7 @@ pub struct Renderer {
 
 impl Renderer {
     pub fn new(width: u16, height: u16) -> Self {
-        Self {
-            current: Buffer::new(width, height),
-            previous: Buffer::new(width, height),
-            force_redraw: true,
-        }
+        Self { current: Buffer::new(width, height), previous: Buffer::new(width, height), force_redraw: true }
     }
 
     pub fn buffer_mut(&mut self) -> &mut Buffer {
@@ -49,8 +45,7 @@ impl Renderer {
 
                 write!(out, "\x1b[{};{}H", y + 1, x + 1)?;
 
-                let ul_style_off = last_ul != UnderlineStyle::None
-                    && (cur.underline == UnderlineStyle::None || cur.underline != last_ul);
+                let ul_style_off = last_ul != UnderlineStyle::None && (cur.underline == UnderlineStyle::None || cur.underline != last_ul);
                 let ul_color_off = last_ul_color.is_some() && cur.underline_color != last_ul_color;
                 let needs_reset = (last_bold && !cur.bold) || ul_style_off || ul_color_off;
 
@@ -83,8 +78,8 @@ impl Renderer {
                 if cur.underline != UnderlineStyle::None && cur.underline != last_ul {
                     match cur.underline {
                         UnderlineStyle::Straight => write!(out, "\x1b[4m")?,
-                        UnderlineStyle::Curly    => write!(out, "\x1b[4:3m")?,
-                        UnderlineStyle::None     => {}
+                        UnderlineStyle::Curly => write!(out, "\x1b[4:3m")?,
+                        UnderlineStyle::None => {}
                     }
                     last_ul = cur.underline;
                 }

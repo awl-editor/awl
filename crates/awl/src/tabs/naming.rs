@@ -8,8 +8,5 @@ pub fn lsp_short_name(key: &str) -> &str {
 }
 
 pub fn tab_name(tab: &buffer::Buffer) -> String {
-    tab.path
-        .file_name()
-        .map(|n| n.to_string_lossy().to_string())
-        .unwrap_or_else(|| "untitled".to_string())
+    tab.path.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_else(|| "untitled".to_string())
 }

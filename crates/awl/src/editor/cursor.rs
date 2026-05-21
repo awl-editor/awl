@@ -1,38 +1,56 @@
-use std::io::{self, Write};
-use ui::layout::Layout;
 use crate::app::App;
 use crate::editor::gutter::gutter_width;
 use crate::editor::selection::visual_col_of;
+use std::io::{self, Write};
+use ui::layout::Layout;
 
 #[derive(Clone, Copy, PartialEq)]
-pub enum PointerShape { Default, Text, Pointer }
+pub enum PointerShape {
+    Default,
+    Text,
+    Pointer,
+}
 
 pub fn pointer_shape_for(app: &App, mx: u16, my: u16, w: u16, h: u16) -> PointerShape {
-    let over = |px: u16, py: u16, pw: u16, ph: u16| {
-        mx >= px && mx < px.saturating_add(pw) && my >= py && my < py.saturating_add(ph)
-    };
+    let over = |px: u16, py: u16, pw: u16, ph: u16| mx >= px && mx < px.saturating_add(pw) && my >= py && my < py.saturating_add(ph);
 
     // Context menus: Pointer only on a real clickable item row; Default on borders/separators.
     if let Some(m) = &app.context_menu {
-        if m.hit(mx, my).is_some() { return PointerShape::Pointer; }
-        if over(m.x, m.y, m.width(), m.height()) { return PointerShape::Default; }
+        if m.hit(mx, my).is_some() {
+            return PointerShape::Pointer;
+        }
+        if over(m.x, m.y, m.width(), m.height()) {
+            return PointerShape::Default;
+        }
     }
     if let Some(m) = &app.editor_context_menu {
-        if m.hit(mx, my).is_some() { return PointerShape::Pointer; }
-        if over(m.x, m.y, m.width(), m.height()) { return PointerShape::Default; }
+        if m.hit(mx, my).is_some() {
+            return PointerShape::Pointer;
+        }
+        if over(m.x, m.y, m.width(), m.height()) {
+            return PointerShape::Default;
+        }
     }
     if let Some(m) = &app.lsp_menu {
-        if m.hit(mx, my).is_some() { return PointerShape::Pointer; }
-        if over(m.x, m.y, m.width(), m.height()) { return PointerShape::Default; }
+        if m.hit(mx, my).is_some() {
+            return PointerShape::Pointer;
+        }
+        if over(m.x, m.y, m.width(), m.height()) {
+            return PointerShape::Default;
+        }
     }
     if let Some(m) = &app.tab_context_menu {
-        if m.hit(mx, my).is_some() { return PointerShape::Pointer; }
-        if over(m.x, m.y, m.width(), m.height()) { return PointerShape::Default; }
+        if m.hit(mx, my).is_some() {
+            return PointerShape::Pointer;
+        }
+        if over(m.x, m.y, m.width(), m.height()) {
+            return PointerShape::Default;
+        }
     }
 
     // Finder overrides all zone logic while it is open.
     if app.finder.is_some() {
-        use crate::popup::finder::{finder_geometry, INPUT_ROW_OFFSET};
+        use crate::popup::finder::{INPUT_ROW_OFFSET, finder_geometry};
         let (pw, ph, px, py, _, _) = finder_geometry(w, h);
         if over(px, py, pw, ph) {
             let input_row = py + ph - INPUT_ROW_OFFSET;
@@ -64,10 +82,14 @@ pub fn pointer_shape_for(app: &App, mx: u16, my: u16, w: u16, h: u16) -> Pointer
     // Explorer: Pointer on the root row and on valid entry rows, Default elsewhere in the column.
     if mx < layout.explorer.x + layout.explorer.width && layout.explorer.width > 0 {
         let root_y = layout.explorer.y;
-        if my == root_y { return PointerShape::Pointer; }
+        if my == root_y {
+            return PointerShape::Pointer;
+        }
         if my > root_y && app.root_expanded {
             let i = (my - root_y - 1) as usize + app.explorer_scroll;
-            if i < app.tree.len() { return PointerShape::Pointer; }
+            if i < app.tree.len() {
+                return PointerShape::Pointer;
+            }
         }
         return PointerShape::Default;
     }
@@ -80,9 +102,7 @@ pub fn pointer_shape_for(app: &App, mx: u16, my: u16, w: u16, h: u16) -> Pointer
     // Breadcrumb dropdown.
     if let Some(m) = &app.breadcrumb_menu {
         if m.screen_w > 0 {
-            if mx >= m.screen_x && mx < m.screen_x + m.screen_w
-                && my >= m.screen_y && my < m.screen_y + m.screen_h
-            {
+            if mx >= m.screen_x && mx < m.screen_x + m.screen_w && my >= m.screen_y && my < m.screen_y + m.screen_h {
                 return PointerShape::Pointer;
             }
         }
@@ -90,10 +110,7 @@ pub fn pointer_shape_for(app: &App, mx: u16, my: u16, w: u16, h: u16) -> Pointer
 
     // Editor text area (past the line-number gutter).
     let text_x = layout.editor.x + gutter_width(app);
-    let in_editor = mx >= text_x
-        && my >= layout.editor.y
-        && my < layout.editor.y + layout.editor.height
-        && mx < layout.editor.x + layout.editor.width;
+    let in_editor = mx >= text_x && my >= layout.editor.y && my < layout.editor.y + layout.editor.height && mx < layout.editor.x + layout.editor.width;
 
     if in_editor { PointerShape::Text } else { PointerShape::Default }
 }
@@ -103,29 +120,41 @@ pub fn cursor_hidden_by_popup(app: &App, cx: u16, cy: u16, _w: u16) -> bool {
         cx >= px && cx < px.saturating_add(pw) && cy >= py && cy < py.saturating_add(ph)
     }
     if let Some(m) = &app.context_menu {
-        if over(m.x, m.y, m.width(), m.height(), cx, cy) { return true; }
+        if over(m.x, m.y, m.width(), m.height(), cx, cy) {
+            return true;
+        }
     }
     if let Some(m) = &app.editor_context_menu {
-        if over(m.x, m.y, m.width(), m.height(), cx, cy) { return true; }
+        if over(m.x, m.y, m.width(), m.height(), cx, cy) {
+            return true;
+        }
     }
     if let Some(m) = &app.lsp_menu {
-        if over(m.x, m.y, m.width(), m.height(), cx, cy) { return true; }
+        if over(m.x, m.y, m.width(), m.height(), cx, cy) {
+            return true;
+        }
     }
     if let Some(m) = &app.tab_context_menu {
-        if over(m.x, m.y, m.width(), m.height(), cx, cy) { return true; }
+        if over(m.x, m.y, m.width(), m.height(), cx, cy) {
+            return true;
+        }
     }
     if let Some(m) = &app.breadcrumb_menu {
-        if m.screen_w > 0 && over(m.screen_x, m.screen_y, m.screen_w, m.screen_h, cx, cy) { return true; }
+        if m.screen_w > 0 && over(m.screen_x, m.screen_y, m.screen_w, m.screen_h, cx, cy) {
+            return true;
+        }
     }
     if let Some(card) = &app.hover_card {
-        if card.cw > 0 && over(card.cx, card.cy, card.cw, card.ch, cx, cy) { return true; }
+        if card.cw > 0 && over(card.cx, card.cy, card.cw, card.ch, cx, cy) {
+            return true;
+        }
     }
     false
 }
 
 pub fn sync_cursor<W: Write>(out: &mut W, app: &App, w: u16, h: u16) -> io::Result<()> {
     if let Some(finder) = &app.finder {
-        use crate::popup::finder::{finder_geometry, INPUT_ROW_OFFSET};
+        use crate::popup::finder::{INPUT_ROW_OFFSET, finder_geometry};
         let (pw, ph, px, py, _, _) = finder_geometry(w, h);
         let query_max = (pw as usize).saturating_sub(18);
         let chars: Vec<char> = finder.input.value.chars().collect();
@@ -152,22 +181,25 @@ pub fn sync_cursor<W: Write>(out: &mut W, app: &App, w: u16, h: u16) -> io::Resu
     }
 
     let layout = Layout::compute_mode(w, h, app.explorer_width, app.minimal_mode);
-    let screen_pos = app.editor_focused.then(|| {
-        app.current().and_then(|b| {
-            if b.cursor_row < b.scroll_row { return None; }
-            let chars: Vec<char> = b.line(b.cursor_row).chars().collect();
-            let cursor_vcol = visual_col_of(&chars, b.cursor_col, 4);
-            let scroll_vcol  = visual_col_of(&chars, b.scroll_col,  4);
-            if cursor_vcol < scroll_vcol { return None; }
-            let sr = layout.editor.y + (b.cursor_row - b.scroll_row) as u16;
-            let sc = layout.editor.x + gutter_width(app) + (cursor_vcol - scroll_vcol) as u16;
-            if sr < layout.editor.y + layout.editor.height && sc < layout.editor.x + layout.editor.width {
-                Some((sc, sr))
-            } else {
-                None
-            }
+    let screen_pos = app
+        .editor_focused
+        .then(|| {
+            app.current().and_then(|b| {
+                if b.cursor_row < b.scroll_row {
+                    return None;
+                }
+                let chars: Vec<char> = b.line(b.cursor_row).chars().collect();
+                let cursor_vcol = visual_col_of(&chars, b.cursor_col, 4);
+                let scroll_vcol = visual_col_of(&chars, b.scroll_col, 4);
+                if cursor_vcol < scroll_vcol {
+                    return None;
+                }
+                let sr = layout.editor.y + (b.cursor_row - b.scroll_row) as u16;
+                let sc = layout.editor.x + gutter_width(app) + (cursor_vcol - scroll_vcol) as u16;
+                if sr < layout.editor.y + layout.editor.height && sc < layout.editor.x + layout.editor.width { Some((sc, sr)) } else { None }
+            })
         })
-    }).flatten();
+        .flatten();
 
     let Some((sc, sr)) = screen_pos else {
         write!(out, "\x1b[?25l")?;

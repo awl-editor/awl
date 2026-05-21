@@ -21,7 +21,9 @@ pub fn sel_contains(sel: Option<((usize, usize), (usize, usize))>, row: usize, c
 pub fn visual_col_of(chars: &[char], char_idx: usize, tab_size: usize) -> usize {
     let mut vcol = 0usize;
     for (i, &ch) in chars.iter().enumerate() {
-        if i >= char_idx { break; }
+        if i >= char_idx {
+            break;
+        }
         if ch == '\t' {
             vcol = (vcol / tab_size + 1) * tab_size;
         } else {
@@ -36,10 +38,14 @@ pub fn visual_col_of(chars: &[char], char_idx: usize, tab_size: usize) -> usize 
 pub fn char_at_visual(chars: &[char], target: usize, tab_size: usize) -> usize {
     let mut vcol = 0usize;
     for (i, &ch) in chars.iter().enumerate() {
-        if vcol >= target { return i; }
+        if vcol >= target {
+            return i;
+        }
         if ch == '\t' {
             let next = (vcol / tab_size + 1) * tab_size;
-            if target < next { return i; }
+            if target < next {
+                return i;
+            }
             vcol = next;
         } else {
             vcol += 1;

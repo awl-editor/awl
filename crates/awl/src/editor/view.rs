@@ -21,9 +21,7 @@ pub struct MatchCache {
 }
 
 fn compute_matches(app: &App, rows: usize) -> MatchCache {
-    let empty = |sel_range, scroll_row, lsp_version| MatchCache {
-        tab: app.active_tab, sel_range, scroll_row, rows, lsp_version, map: HashMap::new(),
-    };
+    let empty = |sel_range, scroll_row, lsp_version| MatchCache { tab: app.active_tab, sel_range, scroll_row, rows, lsp_version, map: HashMap::new() };
     let Some(active) = app.current() else {
         return empty(None, 0, 0);
     };
@@ -45,11 +43,12 @@ fn compute_matches(app: &App, rows: usize) -> MatchCache {
     let mut map: HashMap<usize, Vec<(usize, usize)>> = HashMap::new();
     for r in active.scroll_row..vis_end {
         let line = active.line(r);
-        if line.len() < needle.len() { continue; }
+        if line.len() < needle.len() {
+            continue;
+        }
         if needle_is_ascii {
             for (c, _) in line.match_indices(needle.as_str()) {
-                let is_primary = sr == ((r, c), (r, c + nlen_chars))
-                    || sr == ((r, c + nlen_chars), (r, c));
+                let is_primary = sr == ((r, c), (r, c + nlen_chars)) || sr == ((r, c + nlen_chars), (r, c));
                 if !is_primary {
                     map.entry(r).or_default().push((c, c + nlen_chars));
                 }
@@ -61,8 +60,7 @@ fn compute_matches(app: &App, rows: usize) -> MatchCache {
                 char_cursor += line[byte_cursor..byte_pos].chars().count();
                 byte_cursor = byte_pos;
                 let c = char_cursor;
-                let is_primary = sr == ((r, c), (r, c + nlen_chars))
-                    || sr == ((r, c + nlen_chars), (r, c));
+                let is_primary = sr == ((r, c), (r, c + nlen_chars)) || sr == ((r, c + nlen_chars), (r, c));
                 if !is_primary {
                     map.entry(r).or_default().push((c, c + nlen_chars));
                 }
@@ -83,12 +81,7 @@ pub fn update_highlights(app: &App, highlights: &mut Vec<Option<highlight::Highl
     }
 }
 
-pub fn draw_editor(
-    buf: &mut Buffer,
-    app: &mut App,
-    layout: &Layout,
-    highlights: &[Option<highlight::Highlights>],
-) {
+pub fn draw_editor(buf: &mut Buffer, app: &mut App, layout: &Layout, highlights: &[Option<highlight::Highlights>]) {
     buf.fill(layout.editor, Cell::new(' ', fg(), bg_main()));
 
     let gw = gutter_width(app);
@@ -100,16 +93,9 @@ pub fn draw_editor(
     // Split field borrows (app.tabs vs app.match_cache) let both live in the same block.
     {
         let tab_idx = app.active_tab;
-        let (sel, scroll_row, lsp_version) = app.tabs.get(tab_idx)
-            .map(|a| (a.selection_range(), a.scroll_row, a.lsp_version))
-            .unwrap_or((None, 0, 0));
-        let cache_valid = app.match_cache.as_ref().map_or(false, |c| {
-            c.tab == tab_idx
-                && c.sel_range == sel
-                && c.scroll_row == scroll_row
-                && c.rows == rows
-                && c.lsp_version == lsp_version
-        });
+        let (sel, scroll_row, lsp_version) = app.tabs.get(tab_idx).map(|a| (a.selection_range(), a.scroll_row, a.lsp_version)).unwrap_or((None, 0, 0));
+        let cache_valid =
+            app.match_cache.as_ref().map_or(false, |c| c.tab == tab_idx && c.sel_range == sel && c.scroll_row == scroll_row && c.rows == rows && c.lsp_version == lsp_version);
         if !cache_valid {
             app.match_cache = Some(compute_matches(app, rows));
         }
@@ -130,16 +116,8 @@ pub fn draw_editor(
     let tab_size = TAB_SIZE;
 
     let vis_start = active.scroll_row;
-    let visible_meta: Vec<(bool, usize)> = (vis_start..vis_start + rows + 1)
-        .map(|r| active.line_meta(r))
-        .collect();
-    let meta = |r: usize| -> (bool, usize) {
-        if r >= vis_start && r < vis_start + visible_meta.len() {
-            visible_meta[r - vis_start]
-        } else {
-            active.line_meta(r)
-        }
-    };
+    let visible_meta: Vec<(bool, usize)> = (vis_start..vis_start + rows + 1).map(|r| active.line_meta(r)).collect();
+    let meta = |r: usize| -> (bool, usize) { if r >= vis_start && r < vis_start + visible_meta.len() { visible_meta[r - vis_start] } else { active.line_meta(r) } };
     let line_lws = |r: usize| -> usize { meta(r).1 };
     let line_is_blank = |r: usize| -> bool { meta(r).0 };
 
@@ -147,15 +125,8 @@ pub fn draw_editor(
     let cursor_lws = line_lws(cursor_row);
 
     let scan_end = (vis_start + rows).min(active.line_count());
-    let next_nb_lws = (cursor_row + 1..scan_end)
-        .find(|&r| !line_is_blank(r))
-        .map(line_lws)
-        .unwrap_or(0);
-    let prev_nb_lws = (vis_start..cursor_row)
-        .rev()
-        .find(|&r| !line_is_blank(r))
-        .map(line_lws)
-        .unwrap_or(0);
+    let next_nb_lws = (cursor_row + 1..scan_end).find(|&r| !line_is_blank(r)).map(line_lws).unwrap_or(0);
+    let prev_nb_lws = (vis_start..cursor_row).rev().find(|&r| !line_is_blank(r)).map(line_lws).unwrap_or(0);
 
     let active_guide_col: Option<usize> = {
         let is_boundary = next_nb_lws > cursor_lws || prev_nb_lws > cursor_lws;
@@ -163,11 +134,7 @@ pub fn draw_editor(
             Some((cursor_lws / tab_size) * tab_size)
         } else if cursor_lws > 0 {
             let level = cursor_lws / tab_size;
-            if level > 0 {
-                Some((level - 1) * tab_size)
-            } else {
-                None
-            }
+            if level > 0 { Some((level - 1) * tab_size) } else { None }
         } else {
             None
         }
@@ -182,11 +149,7 @@ pub fn draw_editor(
         while r > scan_low {
             let p = r - 1;
             if line_is_blank(p) {
-                let has_more = (scan_low..p)
-                    .rev()
-                    .find(|&q| !line_is_blank(q))
-                    .map(|q| line_lws(q) > agc)
-                    .unwrap_or(false);
+                let has_more = (scan_low..p).rev().find(|&q| !line_is_blank(q)).map(|q| line_lws(q) > agc).unwrap_or(false);
                 if has_more {
                     start = p;
                     r = p;
@@ -205,10 +168,7 @@ pub fn draw_editor(
         while r + 1 < scan_high {
             let n = r + 1;
             if line_is_blank(n) {
-                let has_more = (n + 1..scan_high)
-                    .find(|&q| !line_is_blank(q))
-                    .map(|q| line_lws(q) > agc)
-                    .unwrap_or(false);
+                let has_more = (n + 1..scan_high).find(|&q| !line_is_blank(q)).map(|q| line_lws(q) > agc).unwrap_or(false);
                 if has_more {
                     end = n;
                     r = n;
@@ -230,12 +190,10 @@ pub fn draw_editor(
     // Cache is guaranteed fresh by the check at the top of this function.
     // Split borrow: active holds &app.tabs, closure holds &app.match_cache.
     let in_match = |row: usize, col: usize| -> bool {
-        app.match_cache.as_ref()
-            .and_then(|c| c.map.get(&row))
-            .map_or(false, |v| {
-                let idx = v.partition_point(|&(s, _)| s <= col);
-                idx > 0 && col < v[idx - 1].1
-            })
+        app.match_cache.as_ref().and_then(|c| c.map.get(&row)).map_or(false, |v| {
+            let idx = v.partition_point(|&(s, _)| s <= col);
+            idx > 0 && col < v[idx - 1].1
+        })
     };
 
     let diag_by_row: HashMap<usize, Vec<&lsp::LspDiagnostic>> = {
@@ -263,25 +221,14 @@ pub fn draw_editor(
         let is_cursor = app.editor_focused && buf_row == active.cursor_row;
         let line_bg = if is_cursor { bg_cursor() } else { bg_main() };
 
-        buf.fill(
-            Rect {
-                x: layout.editor.x,
-                y: sy,
-                width: layout.editor.width,
-                height: 1,
-            },
-            Cell::new(' ', fg(), line_bg),
-        );
+        buf.fill(Rect { x: layout.editor.x, y: sy, width: layout.editor.width, height: 1 }, Cell::new(' ', fg(), line_bg));
 
         if buf_row < active.line_count() {
             let num = format!("{:>width$} ", buf_row + 1, width = num_w);
             let num_fg = if is_cursor { fg() } else { fg_dim() };
             buf.write_str(layout.editor.x + 1, sy, &num, num_fg, line_bg);
 
-            let diff_kind = app
-                .git_line_diff
-                .get(&active.path)
-                .and_then(|m| m.get(&buf_row).copied());
+            let diff_kind = app.git_line_diff.get(&active.path).and_then(|m| m.get(&buf_row).copied());
             let (ind_ch, ind_fg) = match diff_kind {
                 Some(git::DiffKind::Added) => ('▎', git_added()),
                 Some(git::DiffKind::Modified) => ('▎', git_modified()),
@@ -307,15 +254,8 @@ pub fn draw_editor(
         };
         let effective_lws = if buf_row >= active.line_count() || line.trim().is_empty() {
             let vis_end = (vis_start + visible_meta.len()).min(active.line_count());
-            let prev = (vis_start..buf_row)
-                .rev()
-                .find(|&r| !meta(r).0)
-                .map(row_vis_lws)
-                .unwrap_or(0);
-            let next = (buf_row + 1..vis_end)
-                .find(|&r| !meta(r).0)
-                .map(row_vis_lws)
-                .unwrap_or(0);
+            let prev = (vis_start..buf_row).rev().find(|&r| !meta(r).0).map(row_vis_lws).unwrap_or(0);
+            let next = (buf_row + 1..vis_end).find(|&r| !meta(r).0).map(row_vis_lws).unwrap_or(0);
             prev.max(next)
         } else {
             visual_col_of(&chars, leading_ws, tab_size)
@@ -356,21 +296,14 @@ pub fn draw_editor(
                 line_bg
             };
             if let Some((ch, buf_col)) = vis_cells.get(vcol).copied() {
-                let sem = row_sem
-                    .iter()
-                    .find(|t| buf_col >= t.col_start as usize && buf_col < t.col_end as usize);
+                let sem = row_sem.iter().find(|t| buf_col >= t.col_start as usize && buf_col < t.col_end as usize);
                 let fg = if let Some(t) = sem {
-                    semantic_color(&t.token_type)
-                        .unwrap_or_else(|| span_color(highlights, app.active_tab, buf_row, buf_col))
+                    semantic_color(&t.token_type).unwrap_or_else(|| span_color(highlights, app.active_tab, buf_row, buf_col))
                 } else {
                     span_color(highlights, app.active_tab, buf_row, buf_col)
                 };
                 let diag = row_diags.iter().find(|d| {
-                    let end = if d.col_end > d.col_start {
-                        d.col_end
-                    } else {
-                        d.col_start + 1
-                    };
+                    let end = if d.col_end > d.col_start { d.col_end } else { d.col_start + 1 };
                     buf_col >= d.col_start as usize && buf_col < end as usize
                 });
                 let (underline, ul_color) = match diag {
@@ -384,80 +317,24 @@ pub fn draw_editor(
                     ),
                     None => (UnderlineStyle::None, None),
                 };
-                let is_guide = ch == ' '
-                    && buf_col < leading_ws
-                    && vcol % tab_size == 0
-                    && !sel_contains(sel, buf_row, buf_col);
+                let is_guide = ch == ' ' && buf_col < leading_ws && vcol % tab_size == 0 && !sel_contains(sel, buf_row, buf_col);
                 if is_guide {
                     let guide_fg = match active_guide_col {
-                        Some(c)
-                            if c == buf_col && buf_row >= block_start && buf_row <= block_end =>
-                        {
-                            guide_active()
-                        }
+                        Some(c) if c == buf_col && buf_row >= block_start && buf_row <= block_end => guide_active(),
                         _ => guide(),
                     };
-                    buf.set(
-                        sx,
-                        sy,
-                        Cell {
-                            ch: '▏',
-                            fg: guide_fg,
-                            bg: cell_bg,
-                            bold: false,
-                            underline: UnderlineStyle::None,
-                            underline_color: None,
-                        },
-                    );
+                    buf.set(sx, sy, Cell { ch: '▏', fg: guide_fg, bg: cell_bg, bold: false, underline: UnderlineStyle::None, underline_color: None });
                 } else {
-                    buf.set(
-                        sx,
-                        sy,
-                        Cell {
-                            ch,
-                            fg,
-                            bg: cell_bg,
-                            bold: false,
-                            underline,
-                            underline_color: ul_color,
-                        },
-                    );
+                    buf.set(sx, sy, Cell { ch, fg, bg: cell_bg, bold: false, underline, underline_color: ul_color });
                 }
-            } else if vcol < effective_lws
-                && vcol % tab_size == 0
-                && !sel_contains(sel, buf_row, eol_col)
-            {
+            } else if vcol < effective_lws && vcol % tab_size == 0 && !sel_contains(sel, buf_row, eol_col) {
                 let guide_fg = match active_guide_col {
-                    Some(c) if c == vcol && buf_row >= block_start && buf_row <= block_end => {
-                        guide_active()
-                    }
+                    Some(c) if c == vcol && buf_row >= block_start && buf_row <= block_end => guide_active(),
                     _ => guide(),
                 };
-                buf.set(
-                    sx,
-                    sy,
-                    Cell {
-                        ch: '▏',
-                        fg: guide_fg,
-                        bg: line_bg,
-                        bold: false,
-                        underline: UnderlineStyle::None,
-                        underline_color: None,
-                    },
-                );
+                buf.set(sx, sy, Cell { ch: '▏', fg: guide_fg, bg: line_bg, bold: false, underline: UnderlineStyle::None, underline_color: None });
             } else if sel_contains(sel, buf_row, eol_col) {
-                buf.set(
-                    sx,
-                    sy,
-                    Cell {
-                        ch: ' ',
-                        fg: fg(),
-                        bg: bg_select(),
-                        bold: false,
-                        underline: UnderlineStyle::None,
-                        underline_color: None,
-                    },
-                );
+                buf.set(sx, sy, Cell { ch: ' ', fg: fg(), bg: bg_select(), bold: false, underline: UnderlineStyle::None, underline_color: None });
                 break;
             }
         }
@@ -490,18 +367,7 @@ pub fn draw_editor(
                 if ix >= editor_right {
                     break;
                 }
-                buf.set(
-                    ix,
-                    sy,
-                    Cell {
-                        ch: '■',
-                        fg: diag_color(d.severity),
-                        bg: line_bg,
-                        bold: false,
-                        underline: UnderlineStyle::None,
-                        underline_color: None,
-                    },
-                );
+                buf.set(ix, sy, Cell { ch: '■', fg: diag_color(d.severity), bg: line_bg, bold: false, underline: UnderlineStyle::None, underline_color: None });
                 ix += 1;
             }
 
@@ -524,8 +390,7 @@ fn semantic_color(token_type: &str) -> Option<Color> {
 
     use crate::theme;
     Some(match base {
-        "class" | "struct" | "type" | "enum" | "interface" | "typeParameter" | "enumMember"
-        | "namespace" | "decorator" => theme::syntax_type(),
+        "class" | "struct" | "type" | "enum" | "interface" | "typeParameter" | "enumMember" | "namespace" | "decorator" => theme::syntax_type(),
 
         "function" | "method" | "member" => theme::syntax_function(),
 
@@ -548,17 +413,6 @@ fn semantic_color(token_type: &str) -> Option<Color> {
     })
 }
 
-fn span_color(
-    highlights: &[Option<highlight::Highlights>],
-    tab: usize,
-    row: usize,
-    col: usize,
-) -> Color {
-    highlights
-        .get(tab)
-        .and_then(|h| h.as_ref())
-        .and_then(|h| h.get(row))
-        .and_then(|spans| spans.iter().find(|&&(s, e, _)| col >= s && col < e))
-        .map(|&(_, _, c)| c)
-        .unwrap_or(fg())
+fn span_color(highlights: &[Option<highlight::Highlights>], tab: usize, row: usize, col: usize) -> Color {
+    highlights.get(tab).and_then(|h| h.as_ref()).and_then(|h| h.get(row)).and_then(|spans| spans.iter().find(|&&(s, e, _)| col >= s && col < e)).map(|&(_, _, c)| c).unwrap_or(fg())
 }

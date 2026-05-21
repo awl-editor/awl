@@ -1,14 +1,18 @@
+use crate::editor::cursor::PointerShape;
+use crate::editor::view::MatchCache;
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::path::PathBuf;
 use std::time::{Instant, SystemTime, UNIX_EPOCH};
-use crate::editor::cursor::PointerShape;
-use crate::editor::view::MatchCache;
 
 pub mod events;
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 #[allow(dead_code)]
-pub enum StatusLevel { Log, Warn, Error }
+pub enum StatusLevel {
+    Log,
+    Warn,
+    Error,
+}
 
 use buffer::Buffer;
 use lsp::{LspDiagnostic, LspManager, SemanticToken};
@@ -58,9 +62,9 @@ pub struct App {
     pub status_msg: String,
     pub status_level: StatusLevel,
     pub status_expires: Option<Instant>,
-    pub status_log: Vec<(String, StatusLevel, String)>, // (timestamp, level, message)
-    pub status_label_range: (u16, u16),    // x range in status bar for click detection
-    pub diag_label_range: (u16, u16),      // x range for the error/warn count in status bar
+    pub status_log: Vec<(String, StatusLevel, String)>,        // (timestamp, level, message)
+    pub status_label_range: (u16, u16),                        // x range in status bar for click detection
+    pub diag_label_range: (u16, u16),                          // x range for the error/warn count in status bar
     pub diagnostics_nav: Vec<Option<(PathBuf, usize, usize)>>, // line → (file, row, col) for [diagnostics]
     pub dragging_scrollbar: bool,
     pub scrollbar_drag_start_y: u16,
@@ -105,11 +109,19 @@ impl App {
         let tree = tree::load(&root);
         let (git_root, git_branch, git_status) = git::load(&root);
         Self {
-            root, tree, tabs: Vec::new(), active_tab: 0,
-            explorer_selected: 0, explorer_scroll: 0,
+            root,
+            tree,
+            tabs: Vec::new(),
+            active_tab: 0,
+            explorer_selected: 0,
+            explorer_scroll: 0,
             dragging: false,
-            last_click_time: None, last_click_pos: (0, 0), click_count: 0,
-            git_root, git_branch, git_status,
+            last_click_time: None,
+            last_click_pos: (0, 0),
+            click_count: 0,
+            git_root,
+            git_branch,
+            git_status,
             editor_focused: false,
             root_expanded: true,
             explorer_width: 38,
@@ -182,11 +194,7 @@ impl App {
         self.status_log.push((timestamp, level, msg.clone()));
         self.status_msg = msg;
         self.status_level = level;
-        self.status_expires = if duration_ms > 0 {
-            Some(Instant::now() + std::time::Duration::from_millis(duration_ms))
-        } else {
-            None
-        };
+        self.status_expires = if duration_ms > 0 { Some(Instant::now() + std::time::Duration::from_millis(duration_ms)) } else { None };
     }
 
     pub fn tick_swaps(&mut self) {
@@ -194,15 +202,13 @@ impl App {
             return;
         }
         self.last_swap_tick = Instant::now();
-        let to_write: Vec<(PathBuf, String, i32)> = self.tabs.iter()
+        let to_write: Vec<(PathBuf, String, i32)> = self
+            .tabs
+            .iter()
             .filter(|t| !t.virtual_tab && t.modified)
             .filter_map(|t| {
                 let last = self.swap_versions.get(&t.path).copied().unwrap_or(0);
-                if t.lsp_version != last {
-                    Some((t.path.clone(), t.rope.to_string(), t.lsp_version))
-                } else {
-                    None
-                }
+                if t.lsp_version != last { Some((t.path.clone(), t.rope.to_string(), t.lsp_version)) } else { None }
             })
             .collect();
         for (path, content, version) in to_write {
@@ -224,18 +230,24 @@ impl App {
     }
 
     pub fn status_log_text(&self) -> String {
-        self.status_log.iter().map(|(ts, level, msg)| {
-            let tag = match level {
-                StatusLevel::Log   => "INFO",
-                StatusLevel::Warn  => "WARN",
-                StatusLevel::Error => "ERROR",
-            };
-            format!("[{}] [{}] {}", ts, tag, msg)
-        }).collect::<Vec<_>>().join("\n")
+        self.status_log
+            .iter()
+            .map(|(ts, level, msg)| {
+                let tag = match level {
+                    StatusLevel::Log => "INFO",
+                    StatusLevel::Warn => "WARN",
+                    StatusLevel::Error => "ERROR",
+                };
+                format!("[{}] [{}] {}", ts, tag, msg)
+            })
+            .collect::<Vec<_>>()
+            .join("\n")
     }
 
     pub fn reveal_in_explorer(&mut self, path: &std::path::Path, visible_rows: usize) {
-        if !path.starts_with(&self.root) { return; }
+        if !path.starts_with(&self.root) {
+            return;
+        }
         let Ok(rel) = path.strip_prefix(&self.root) else { return };
 
         self.root_expanded = true;
@@ -278,12 +290,18 @@ impl App {
             let worst = diags.iter().map(|d| d.severity).min().unwrap_or(255);
             if worst <= 2 {
                 let e = cache.entry(path.clone()).or_insert(worst);
-                if worst < *e { *e = worst; }
+                if worst < *e {
+                    *e = worst;
+                }
                 let mut cur = path.parent();
                 while let Some(dir) = cur {
-                    if !dir.starts_with(&self.root) { break; }
+                    if !dir.starts_with(&self.root) {
+                        break;
+                    }
                     let e = cache.entry(dir.to_path_buf()).or_insert(worst);
-                    if worst < *e { *e = worst; }
+                    if worst < *e {
+                        *e = worst;
+                    }
                     cur = dir.parent();
                 }
             }
@@ -294,7 +312,9 @@ impl App {
     }
 
     pub fn close_tab(&mut self, idx: usize) {
-        if idx >= self.tabs.len() { return; }
+        if idx >= self.tabs.len() {
+            return;
+        }
         self.tabs.remove(idx);
         if self.active_tab >= self.tabs.len() && self.active_tab > 0 {
             self.active_tab -= 1;
@@ -326,10 +346,7 @@ impl App {
             self.lsp.document_symbols(&buf.path);
             self.refresh_file_diff(&buf.path.clone());
             if let Some(swap_content) = crate::swap::read_if_different(&buf.path) {
-                self.recovery_dialog = Some(crate::popup::RecoveryDialog {
-                    path: buf.path.clone(),
-                    swap_content,
-                });
+                self.recovery_dialog = Some(crate::popup::RecoveryDialog { path: buf.path.clone(), swap_content });
             }
             self.tabs.push(buf);
             self.active_tab = self.tabs.len() - 1;
@@ -355,29 +372,30 @@ impl App {
     pub fn push_history(&mut self) {
         let Some(buf) = self.current() else { return };
         let entry = HistoryEntry { path: buf.path.clone(), row: buf.cursor_row, col: buf.cursor_col };
-        if self.history_back.back()
-            .map(|e| e.path == entry.path && e.row == entry.row && e.col == entry.col)
-            .unwrap_or(false)
-        {
+        if self.history_back.back().map(|e| e.path == entry.path && e.row == entry.row && e.col == entry.col).unwrap_or(false) {
             return;
         }
         self.history_back.push_back(entry);
-        if self.history_back.len() > 200 { self.history_back.pop_front(); }
+        if self.history_back.len() > 200 {
+            self.history_back.pop_front();
+        }
         self.history_fwd.clear();
     }
 
     pub fn push_history_if_distant(&mut self, line_threshold: usize) {
         let Some(buf) = self.current() else { return };
         let path = buf.path.clone();
-        let row  = buf.cursor_row;
-        let col  = buf.cursor_col;
-        let close = self.history_back.back().map(|e| {
-            e.path == path && e.row.abs_diff(row) < line_threshold
-        }).unwrap_or(false);
-        if close { return; }
+        let row = buf.cursor_row;
+        let col = buf.cursor_col;
+        let close = self.history_back.back().map(|e| e.path == path && e.row.abs_diff(row) < line_threshold).unwrap_or(false);
+        if close {
+            return;
+        }
         let entry = HistoryEntry { path, row, col };
         self.history_back.push_back(entry);
-        if self.history_back.len() > 200 { self.history_back.pop_front(); }
+        if self.history_back.len() > 200 {
+            self.history_back.pop_front();
+        }
         self.history_fwd.clear();
     }
 
@@ -429,11 +447,11 @@ impl App {
 
         for path in paths {
             let diags = &self.diagnostics[path];
-            if diags.is_empty() { continue; }
+            if diags.is_empty() {
+                continue;
+            }
 
-            let rel = path.strip_prefix(&self.root)
-                .map(|p| p.to_string_lossy().into_owned())
-                .unwrap_or_else(|_| path.to_string_lossy().into_owned());
+            let rel = path.strip_prefix(&self.root).map(|p| p.to_string_lossy().into_owned()).unwrap_or_else(|_| path.to_string_lossy().into_owned());
 
             let mut sorted = diags.clone();
             sorted.sort_by_key(|d| (d.severity, d.row, d.col_start));

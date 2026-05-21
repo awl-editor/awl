@@ -5,63 +5,63 @@ pub fn lang_id(path: &Path) -> Option<&'static str> {
         return Some("cmake");
     }
     match path.extension()?.to_str()? {
-        "rs"                                   => Some("rust"),
-        "py" | "pyw"                           => Some("python"),
-        "js" | "mjs" | "cjs"                   => Some("javascript"),
-        "ts"                                   => Some("typescript"),
-        "tsx"                                  => Some("typescriptreact"),
-        "jsx"                                  => Some("javascriptreact"),
-        "c" | "h"                              => Some("c"),
-        "cpp" | "cc" | "cxx" | "hpp" | "hxx"   => Some("cpp"),
-        "go"                                   => Some("go"),
-        "lua"                                  => Some("lua"),
-        "sh" | "bash" | "zsh"                  => Some("shellscript"),
-        "nix"                                  => Some("nix"),
-        "zig"                                  => Some("zig"),
-        "cmake"                                => Some("cmake"),
-        _                                      => None,
+        "rs" => Some("rust"),
+        "py" | "pyw" => Some("python"),
+        "js" | "mjs" | "cjs" => Some("javascript"),
+        "ts" => Some("typescript"),
+        "tsx" => Some("typescriptreact"),
+        "jsx" => Some("javascriptreact"),
+        "c" | "h" => Some("c"),
+        "cpp" | "cc" | "cxx" | "hpp" | "hxx" => Some("cpp"),
+        "go" => Some("go"),
+        "lua" => Some("lua"),
+        "sh" | "bash" | "zsh" => Some("shellscript"),
+        "nix" => Some("nix"),
+        "zig" => Some("zig"),
+        "cmake" => Some("cmake"),
+        _ => None,
     }
 }
 
 pub(crate) fn server_key(lang: &str) -> Option<&'static str> {
     match lang {
-        "c" | "cpp"                                                          => Some("clangd"),
-        "rust"                                                               => Some("rust-analyzer"),
-        "typescript" | "typescriptreact" | "javascript" | "javascriptreact"  => Some("typescript-language-server"),
-        "python"                                                             => Some("pylsp"),
-        "go"                                                                 => Some("gopls"),
-        "lua"                                                                => Some("lua-language-server"),
-        "zig"                                                                => Some("zls"),
-        "cmake"                                                              => Some("neocmakelsp"),
-        _                                                                    => None,
+        "c" | "cpp" => Some("clangd"),
+        "rust" => Some("rust-analyzer"),
+        "typescript" | "typescriptreact" | "javascript" | "javascriptreact" => Some("typescript-language-server"),
+        "python" => Some("pylsp"),
+        "go" => Some("gopls"),
+        "lua" => Some("lua-language-server"),
+        "zig" => Some("zls"),
+        "cmake" => Some("neocmakelsp"),
+        _ => None,
     }
 }
 
 pub(crate) fn server_command(key: &str) -> Option<(&'static str, &'static [&'static str])> {
     match key {
-        "clangd"                     => Some(("clangd",                     &[])),
-        "rust-analyzer"              => Some(("rust-analyzer",              &[])),
+        "clangd" => Some(("clangd", &[])),
+        "rust-analyzer" => Some(("rust-analyzer", &[])),
         "typescript-language-server" => Some(("typescript-language-server", &["--stdio"])),
-        "pylsp"                      => Some(("pylsp",                      &[])),
-        "gopls"                      => Some(("gopls",                      &[])),
-        "lua-language-server"        => Some(("lua-language-server",        &[])),
-        "zls"                        => Some(("zls",                        &[])),
-        "neocmakelsp"                => Some(("neocmakelsp",                &["stdio"])),
-        _                            => None,
+        "pylsp" => Some(("pylsp", &[])),
+        "gopls" => Some(("gopls", &[])),
+        "lua-language-server" => Some(("lua-language-server", &[])),
+        "zls" => Some(("zls", &[])),
+        "neocmakelsp" => Some(("neocmakelsp", &["stdio"])),
+        _ => None,
     }
 }
 
 pub(crate) fn find_root(key: &str, path: &Path) -> PathBuf {
     let primary: &[&str] = match key {
-        "clangd"                     => &[".clangd", "compile_commands.json", "CMakeLists.txt"],
-        "rust-analyzer"              => &["Cargo.toml"],
+        "clangd" => &[".clangd", "compile_commands.json", "CMakeLists.txt"],
+        "rust-analyzer" => &["Cargo.toml"],
         "typescript-language-server" => &["tsconfig.json", "jsconfig.json", "package.json"],
-        "pylsp"                      => &["pyproject.toml", "setup.py", "setup.cfg"],
-        "gopls"                      => &["go.mod"],
-        "lua-language-server"        => &[".luarc.json"],
-        "zls"                        => &["build.zig"],
-        "neocmakelsp"                => &["CMakeLists.txt", "CMakePresets.json"],
-        _                            => &[],
+        "pylsp" => &["pyproject.toml", "setup.py", "setup.cfg"],
+        "gopls" => &["go.mod"],
+        "lua-language-server" => &[".luarc.json"],
+        "zls" => &["build.zig"],
+        "neocmakelsp" => &["CMakeLists.txt", "CMakePresets.json"],
+        _ => &[],
     };
     static FALLBACK: &[&str] = &[".git", ".hg"];
 
@@ -74,7 +74,7 @@ pub(crate) fn find_root(key: &str, path: &Path) -> PathBuf {
         }
         match dir.parent() {
             Some(p) => dir = p,
-            None    => break,
+            None => break,
         }
     }
 
@@ -85,7 +85,7 @@ pub(crate) fn find_root(key: &str, path: &Path) -> PathBuf {
         }
         match dir.parent() {
             Some(p) => dir = p,
-            None    => return start.to_path_buf(),
+            None => return start.to_path_buf(),
         }
     }
 }

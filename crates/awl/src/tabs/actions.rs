@@ -18,9 +18,7 @@ pub fn execute_tab_menu_action(app: &mut App, action: TabMenuAction, tab_idx: us
             }
         }
         TabMenuAction::CloseOthers => {
-            let to_close: Vec<usize> = (0..app.tabs.len())
-                .filter(|&i| i != tab_idx && (app.tabs[i].virtual_tab || !app.tabs[i].modified))
-                .collect();
+            let to_close: Vec<usize> = (0..app.tabs.len()).filter(|&i| i != tab_idx && (app.tabs[i].virtual_tab || !app.tabs[i].modified)).collect();
             for i in to_close.into_iter().rev() {
                 app.close_tab(i);
             }
@@ -28,9 +26,7 @@ pub fn execute_tab_menu_action(app: &mut App, action: TabMenuAction, tab_idx: us
             app.needs_git_refresh = true;
         }
         TabMenuAction::CloseLeft => {
-            let to_close: Vec<usize> = (0..tab_idx.min(app.tabs.len()))
-                .filter(|&i| app.tabs[i].virtual_tab || !app.tabs[i].modified)
-                .collect();
+            let to_close: Vec<usize> = (0..tab_idx.min(app.tabs.len())).filter(|&i| app.tabs[i].virtual_tab || !app.tabs[i].modified).collect();
             for i in to_close.into_iter().rev() {
                 app.close_tab(i);
             }
@@ -38,9 +34,7 @@ pub fn execute_tab_menu_action(app: &mut App, action: TabMenuAction, tab_idx: us
             app.needs_git_refresh = true;
         }
         TabMenuAction::CloseRight => {
-            let to_close: Vec<usize> = ((tab_idx + 1)..app.tabs.len())
-                .filter(|&i| app.tabs[i].virtual_tab || !app.tabs[i].modified)
-                .collect();
+            let to_close: Vec<usize> = ((tab_idx + 1)..app.tabs.len()).filter(|&i| app.tabs[i].virtual_tab || !app.tabs[i].modified).collect();
             for i in to_close.into_iter().rev() {
                 app.close_tab(i);
             }
@@ -48,9 +42,7 @@ pub fn execute_tab_menu_action(app: &mut App, action: TabMenuAction, tab_idx: us
             app.needs_git_refresh = true;
         }
         TabMenuAction::CloseSaved | TabMenuAction::CloseAll => {
-            let to_close: Vec<usize> = (0..app.tabs.len())
-                .filter(|&i| app.tabs[i].virtual_tab || !app.tabs[i].modified)
-                .collect();
+            let to_close: Vec<usize> = (0..app.tabs.len()).filter(|&i| app.tabs[i].virtual_tab || !app.tabs[i].modified).collect();
             for i in to_close.into_iter().rev() {
                 app.close_tab(i);
             }
@@ -64,9 +56,7 @@ pub fn execute_tab_menu_action(app: &mut App, action: TabMenuAction, tab_idx: us
         }
         TabMenuAction::CopyRelPath => {
             if let Some(tab) = app.tabs.get(tab_idx) {
-                let rel = tab.path.strip_prefix(&app.root)
-                    .map(|p| p.to_string_lossy().into_owned())
-                    .unwrap_or_else(|_| tab.path.to_string_lossy().into_owned());
+                let rel = tab.path.strip_prefix(&app.root).map(|p| p.to_string_lossy().into_owned()).unwrap_or_else(|_| tab.path.to_string_lossy().into_owned());
                 set_clipboard(&rel);
             }
         }

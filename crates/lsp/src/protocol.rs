@@ -1,8 +1,8 @@
+use super::types::WriterMsg;
+use serde_json::{Value, json};
 use std::path::{Path, PathBuf};
 use std::process::ChildStdin;
 use std::sync::mpsc::Sender;
-use serde_json::{json, Value};
-use super::types::WriterMsg;
 
 pub(crate) fn send_raw(tx: &Sender<WriterMsg>, msg: Value) {
     let _ = tx.send(WriterMsg::Data(msg.to_string()));
@@ -15,7 +15,7 @@ pub(crate) fn write_lsp(stdin: &mut ChildStdin, msg: &str) -> bool {
 }
 
 pub(crate) fn initialize_msg(id: i64, root: &Path) -> Value {
-    let uri  = path_uri(root).unwrap_or_default();
+    let uri = path_uri(root).unwrap_or_default();
     let name = root.file_name().unwrap_or_default().to_string_lossy().to_string();
     json!({
         "jsonrpc": "2.0",

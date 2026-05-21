@@ -1,15 +1,17 @@
-use std::collections::HashMap;
-use std::path::{Path, PathBuf};
 use super::client::LspClient;
 use super::lang::{find_root, lang_id, server_key};
 use super::types::*;
+use std::collections::HashMap;
+use std::path::{Path, PathBuf};
 
 pub struct LspManager {
     clients: HashMap<&'static str, LspClient>,
 }
 
 impl Default for LspManager {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl LspManager {
@@ -19,7 +21,7 @@ impl LspManager {
 
     pub fn open(&mut self, path: &Path, text: &str) {
         let Some(lang) = lang_id(path) else { return };
-        let Some(key)  = server_key(lang) else { return };
+        let Some(key) = server_key(lang) else { return };
         if !self.clients.contains_key(key) {
             let root = find_root(key, path);
             if let Some(client) = LspClient::start(key, &root) {
@@ -33,7 +35,7 @@ impl LspManager {
 
     pub fn change(&mut self, path: &Path, text: &str, version: i32) {
         let Some(lang) = lang_id(path) else { return };
-        let Some(key)  = server_key(lang) else { return };
+        let Some(key) = server_key(lang) else { return };
         if let Some(client) = self.clients.get_mut(key) {
             client.did_change(path, text, version);
             client.request_semantic_tokens(path);
@@ -42,7 +44,7 @@ impl LspManager {
 
     pub fn save(&mut self, path: &Path, text: &str) {
         let Some(lang) = lang_id(path) else { return };
-        let Some(key)  = server_key(lang) else { return };
+        let Some(key) = server_key(lang) else { return };
         if let Some(client) = self.clients.get_mut(key) {
             client.did_save(path, text);
         }
@@ -50,7 +52,7 @@ impl LspManager {
 
     pub fn close(&mut self, path: &Path) {
         let Some(lang) = lang_id(path) else { return };
-        let Some(key)  = server_key(lang) else { return };
+        let Some(key) = server_key(lang) else { return };
         if let Some(client) = self.clients.get_mut(key) {
             client.did_close(path);
         }
@@ -58,7 +60,7 @@ impl LspManager {
 
     pub fn request_semantic_tokens(&mut self, path: &Path) {
         let Some(lang) = lang_id(path) else { return };
-        let Some(key)  = server_key(lang) else { return };
+        let Some(key) = server_key(lang) else { return };
         if let Some(client) = self.clients.get_mut(key) {
             client.request_semantic_tokens(path);
         }
@@ -66,7 +68,7 @@ impl LspManager {
 
     pub fn goto(&mut self, kind: GotoKind, path: &Path, line: u32, col: u32) {
         let Some(lang) = lang_id(path) else { return };
-        let Some(key)  = server_key(lang) else { return };
+        let Some(key) = server_key(lang) else { return };
         if let Some(client) = self.clients.get_mut(key) {
             client.goto(kind, path, line, col);
         }
@@ -74,21 +76,19 @@ impl LspManager {
 
     pub fn rename_symbol(&mut self, path: &Path, line: u32, col: u32, new_name: &str) {
         let Some(lang) = lang_id(path) else { return };
-        let Some(key)  = server_key(lang) else { return };
+        let Some(key) = server_key(lang) else { return };
         if let Some(client) = self.clients.get_mut(key) {
             client.rename_symbol(path, line, col, new_name);
         }
     }
 
     pub fn has_server_for(&self, path: &Path) -> bool {
-        lang_id(path).and_then(|l| server_key(l))
-            .map(|k| self.clients.contains_key(k))
-            .unwrap_or(false)
+        lang_id(path).and_then(|l| server_key(l)).map(|k| self.clients.contains_key(k)).unwrap_or(false)
     }
 
     pub fn hover(&mut self, path: &Path, line: u32, col: u32) {
         let Some(lang) = lang_id(path) else { return };
-        let Some(key)  = server_key(lang) else { return };
+        let Some(key) = server_key(lang) else { return };
         if let Some(client) = self.clients.get_mut(key) {
             client.hover(path, line, col);
         }
@@ -96,7 +96,7 @@ impl LspManager {
 
     pub fn code_action(&mut self, path: &Path, line: u32, col: u32, diagnostics: &[LspDiagnostic]) {
         let Some(lang) = lang_id(path) else { return };
-        let Some(key)  = server_key(lang) else { return };
+        let Some(key) = server_key(lang) else { return };
         if let Some(client) = self.clients.get_mut(key) {
             client.code_action(path, line, col, diagnostics);
         }
@@ -104,7 +104,7 @@ impl LspManager {
 
     pub fn format_document(&mut self, path: &Path) {
         let Some(lang) = lang_id(path) else { return };
-        let Some(key)  = server_key(lang) else { return };
+        let Some(key) = server_key(lang) else { return };
         if let Some(client) = self.clients.get_mut(key) {
             client.format_document(path);
         }
@@ -112,7 +112,7 @@ impl LspManager {
 
     pub fn document_symbols(&mut self, path: &Path) {
         let Some(lang) = lang_id(path) else { return };
-        let Some(key)  = server_key(lang) else { return };
+        let Some(key) = server_key(lang) else { return };
         if let Some(client) = self.clients.get_mut(key) {
             client.document_symbols(path);
         }
@@ -120,7 +120,7 @@ impl LspManager {
 
     pub fn completion(&mut self, path: &Path, line: u32, col: u32) {
         let Some(lang) = lang_id(path) else { return };
-        let Some(key)  = server_key(lang) else { return };
+        let Some(key) = server_key(lang) else { return };
         if let Some(client) = self.clients.get_mut(key) {
             client.completion(path, line, col);
         }
@@ -149,7 +149,9 @@ impl LspManager {
     }
 
     pub fn start_for_path(&mut self, key: &'static str, path: &Path) {
-        if self.clients.contains_key(key) { return; }
+        if self.clients.contains_key(key) {
+            return;
+        }
         let root = find_root(key, path);
         if let Some(client) = LspClient::start(key, &root) {
             self.clients.insert(key, client);
@@ -157,10 +159,7 @@ impl LspManager {
     }
 
     pub fn logs(&self, key: &str) -> Vec<String> {
-        self.clients.get(key)
-            .and_then(|c| c.logs.lock().ok())
-            .map(|l| l.clone())
-            .unwrap_or_default()
+        self.clients.get(key).and_then(|c| c.logs.lock().ok()).map(|l| l.clone()).unwrap_or_default()
     }
 
     pub fn restart(&mut self, key: &'static str, open_files: &[(PathBuf, String)]) {
