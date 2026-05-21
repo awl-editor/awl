@@ -7,15 +7,9 @@ use ui::buffer::Buffer;
 use ui::cell::{Cell, Color};
 use ui::layout::Rect;
 
-// Layout constants (rows from py):
-//   0          top border   ┌── Results ──┬── Preview ──┐
-//   1 .. ph-4  content rows │ results     │ preview     │
-//   ph-3       separator    ├─────────────┴─────────────┤
-//   ph-2       input row    │ ▶ query         N / M     │
-//   ph-1       bot border   └──── query text ───────────┘
 pub const CONTENT_TOP_OFFSET: u16 = 1;
-pub const CONTENT_BOT_OFFSET: u16 = 3; // sep + input + border counted from bottom
-pub const INPUT_ROW_OFFSET: u16 = 2; // from bottom
+pub const CONTENT_BOT_OFFSET: u16 = 3;
+pub const INPUT_ROW_OFFSET: u16 = 2;
 
 pub fn finder_geometry(w: u16, h: u16) -> (u16, u16, u16, u16, u16, u16) {
     let pw = (w * 3 / 4).max(60).min(w.saturating_sub(4));
@@ -52,8 +46,6 @@ pub fn draw_finder(buf: &mut Buffer, finder: &FinderPopup, root: &Path, w: u16, 
     }
 
     buf.fill(Rect { x: px, y: py, width: pw, height: ph }, Cell::new(' ', fg(), popup_bg()));
-
-    // ── Top border with section titles ────────────────────────────────────────
     {
         let res_label = " Results ";
         let prev_label = " Preview ";
@@ -94,12 +86,9 @@ pub fn draw_finder(buf: &mut Buffer, finder: &FinderPopup, root: &Path, w: u16, 
         buf.set(px + pw - 1, y, Cell::new('│', popup_border(), popup_bg()));
     }
 
-    // ── Left pane: result list ────────────────────────────────────────────────
-    // Content mode column layout: [▶/ ][lnum:4][│][ ][text...][  filename]
-    // File mode column layout:    [▶/ ][ path...              ][  filename]
     const LNUM_W: usize = 4;
-    const CONTENT_PREFIX: usize = 1 + LNUM_W + 1 + 1; // sel + lnum + │ + space
-    const FILE_PREFIX: usize = 2; // sel + space
+    const CONTENT_PREFIX: usize = 1 + LNUM_W + 1 + 1;
+    const FILE_PREFIX: usize = 2;
 
     let list_x = px + 1;
     let list_w = (left_w as usize).saturating_sub(2);
@@ -134,12 +123,10 @@ pub fn draw_finder(buf: &mut Buffer, finder: &FinderPopup, root: &Path, w: u16, 
 
         buf.fill(Rect { x: list_x, y: screen_y, width: left_w.saturating_sub(1), height: 1 }, Cell::new(' ', fg(), item_bg));
 
-        // ▶ indicator
         let (sel_ch, sel_fg) = if is_sel { ('▶', finder_accent()) } else { (' ', item_bg) };
         buf.set(list_x, screen_y, Cell::new(sel_ch, sel_fg, item_bg));
 
         if is_file_mode {
-            // File mode: [▶/ ][ dir/filename ]
             let prefix_w = FILE_PREFIX;
             if list_w > prefix_w {
                 let avail = list_w - prefix_w;
@@ -147,7 +134,6 @@ pub fn draw_finder(buf: &mut Buffer, finder: &FinderPopup, root: &Path, w: u16, 
                 let full = rel.display().to_string();
                 let filename = rel.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
 
-                // Right-aligned filename, left side shows parent dir
                 let fname_w = filename.len().min(avail);
                 let dir_avail = avail.saturating_sub(fname_w + if fname_w < avail { 1 } else { 0 });
                 let dir_str = full.chars().take(dir_avail).collect::<String>();
@@ -163,7 +149,6 @@ pub fn draw_finder(buf: &mut Buffer, finder: &FinderPopup, root: &Path, w: u16, 
                 buf.write_str(fname_x, screen_y, &filename.chars().take(fname_w).collect::<String>(), fname_fg, item_bg);
             }
         } else {
-            // Content mode: [▶/ ][lnum:4][│][ ][text...][  filename]
             let lnum_str = format!("{:>width$}", m.line_num, width = LNUM_W);
             let lnum_fg = if is_sel { finder_lnum_sel() } else { fg_dim() };
             buf.write_str(list_x + 1, screen_y, &lnum_str, lnum_fg, item_bg);
@@ -195,7 +180,6 @@ pub fn draw_finder(buf: &mut Buffer, finder: &FinderPopup, root: &Path, w: u16, 
         }
     }
 
-    // ── Right pane: file preview ──────────────────────────────────────────────
     let preview_x = split_x + 1;
     let preview_w = (pw as usize).saturating_sub(left_w as usize + 2);
     let fill_w = (pw.saturating_sub(left_w + 2)).max(1);
@@ -209,7 +193,6 @@ pub fn draw_finder(buf: &mut Buffer, finder: &FinderPopup, root: &Path, w: u16, 
         buf.write_str(mx, hy, msg, fg_dim(), popup_bg());
     }
 
-    // Group sem_tokens by line once so per-character lookup is O(tokens_on_line).
     let mut sem_by_line: std::collections::HashMap<usize, Vec<&SemanticToken>> = std::collections::HashMap::new();
     for t in sem_tokens {
         sem_by_line.entry(t.line as usize).or_default().push(t);
@@ -238,7 +221,6 @@ pub fn draw_finder(buf: &mut Buffer, finder: &FinderPopup, root: &Path, w: u16, 
         }
     }
 
-    // ── Separator ─────────────────────────────────────────────────────────────
     let sep_y = content_y1;
     buf.set(px, sep_y, Cell::new('├', popup_border(), popup_bg()));
     for i in 1..pw - 1 {
@@ -247,7 +229,6 @@ pub fn draw_finder(buf: &mut Buffer, finder: &FinderPopup, root: &Path, w: u16, 
     }
     buf.set(px + pw - 1, sep_y, Cell::new('┤', popup_border(), popup_bg()));
 
-    // ── Input row ─────────────────────────────────────────────────────────────
     let input_y = py + ph - INPUT_ROW_OFFSET;
     buf.set(px, input_y, Cell::new('│', popup_border(), popup_bg()));
     buf.set(px + pw - 1, input_y, Cell::new('│', popup_border(), popup_bg()));
@@ -268,7 +249,6 @@ pub fn draw_finder(buf: &mut Buffer, finder: &FinderPopup, root: &Path, w: u16, 
         }
     }
 
-    // ── Bottom border with query as centred title ─────────────────────────────
     let bot_y = py + ph - 1;
     let default_title = if is_file_mode {
         " find-file "
