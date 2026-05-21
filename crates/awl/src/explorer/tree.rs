@@ -19,18 +19,12 @@ pub fn load(root: &PathBuf) -> Vec<Entry> {
 /// directory that was open in `old`. Also tries to keep `selected` pointing
 /// at the same path it was on before the reload.
 pub fn reload(root: &PathBuf, old: &[Entry], selected: usize) -> (Vec<Entry>, usize) {
-    let expanded: std::collections::HashSet<PathBuf> = old
-        .iter()
-        .filter(|e| e.is_dir && e.expanded)
-        .map(|e| e.path.clone())
-        .collect();
+    let expanded: std::collections::HashSet<PathBuf> = old.iter().filter(|e| e.is_dir && e.expanded).map(|e| e.path.clone()).collect();
 
     let selected_path = old.get(selected).map(|e| e.path.clone());
 
     let mut tree = load(root);
 
-    // Re-expand in a single forward pass — toggle inserts children right after
-    // the dir entry, so newly inserted children are visited naturally.
     let mut i = 0;
     while i < tree.len() {
         if tree[i].is_dir && expanded.contains(&tree[i].path) {
@@ -39,11 +33,7 @@ pub fn reload(root: &PathBuf, old: &[Entry], selected: usize) -> (Vec<Entry>, us
         i += 1;
     }
 
-    // Restore selected index to the same path if possible.
-    let new_selected = selected_path
-        .and_then(|p| tree.iter().position(|e| e.path == p))
-        .unwrap_or(0)
-        .min(tree.len().saturating_sub(1));
+    let new_selected = selected_path.and_then(|p| tree.iter().position(|e| e.path == p)).unwrap_or(0).min(tree.len().saturating_sub(1));
 
     (tree, new_selected)
 }
@@ -55,17 +45,14 @@ pub fn toggle(entries: &mut Vec<Entry>, idx: usize) {
     let depth = entries[idx].depth;
     if entries[idx].expanded {
         entries[idx].expanded = false;
-        while idx + 1 < entries.len() && entries[idx + 1].depth > depth {
-            entries.remove(idx + 1);
-        }
+        let count = entries[idx + 1..].iter().take_while(|e| e.depth > depth).count();
+        entries.drain(idx + 1..idx + 1 + count);
     } else {
         entries[idx].expanded = true;
         let path = entries[idx].path.clone();
         let mut children = Vec::new();
         read_dir(&path, depth + 1, &mut children);
-        for (i, child) in children.into_iter().enumerate() {
-            entries.insert(idx + 1 + i, child);
-        }
+        entries.splice(idx + 1..idx + 1, children);
     }
 }
 

@@ -1,7 +1,7 @@
 use std::io::{self, Write};
 
 use crate::buffer::Buffer;
-use crate::cell::Color;
+use crate::cell::{Color, UnderlineStyle};
 
 pub struct Renderer {
     current: Buffer,
@@ -35,7 +35,8 @@ impl Renderer {
         let mut last_fg: Option<Color> = None;
         let mut last_bg: Option<Color> = None;
         let mut last_bold = false;
-        let mut last_underline = false;
+        let mut last_ul = UnderlineStyle::None;
+        let mut last_ul_color: Option<Color> = None;
 
         for y in 0..height {
             for x in 0..width {
@@ -46,18 +47,20 @@ impl Renderer {
                     continue;
                 }
 
-                // always move cursor absolutely to avoid drifting that can be caused by skipped
-                // cells or abnormally wide glyphs shifting the implicit pos.
                 write!(out, "\x1b[{};{}H", y + 1, x + 1)?;
 
-                // Reset if any attribute needs to turn off
-                let needs_reset = (last_bold && !cur.bold) || (last_underline && !cur.underline);
+                let ul_style_off = last_ul != UnderlineStyle::None
+                    && (cur.underline == UnderlineStyle::None || cur.underline != last_ul);
+                let ul_color_off = last_ul_color.is_some() && cur.underline_color != last_ul_color;
+                let needs_reset = (last_bold && !cur.bold) || ul_style_off || ul_color_off;
+
                 if needs_reset {
                     write!(out, "\x1b[0m")?;
                     last_fg = None;
                     last_bg = None;
                     last_bold = false;
-                    last_underline = false;
+                    last_ul = UnderlineStyle::None;
+                    last_ul_color = None;
                 }
 
                 if last_fg != Some(cur.fg) {
@@ -77,9 +80,21 @@ impl Renderer {
                     last_bold = true;
                 }
 
-                if cur.underline && !last_underline {
-                    write!(out, "\x1b[4m")?;
-                    last_underline = true;
+                if cur.underline != UnderlineStyle::None && cur.underline != last_ul {
+                    match cur.underline {
+                        UnderlineStyle::Straight => write!(out, "\x1b[4m")?,
+                        UnderlineStyle::Curly    => write!(out, "\x1b[4:3m")?,
+                        UnderlineStyle::None     => {}
+                    }
+                    last_ul = cur.underline;
+                }
+
+                if cur.underline != UnderlineStyle::None && cur.underline_color != last_ul_color {
+                    match cur.underline_color {
+                        Some(Color { r, g, b }) => write!(out, "\x1b[58;2;{r};{g};{b}m")?,
+                        None => write!(out, "\x1b[59m")?,
+                    }
+                    last_ul_color = cur.underline_color;
                 }
 
                 let ch = if cur.ch.is_control() { ' ' } else { cur.ch };

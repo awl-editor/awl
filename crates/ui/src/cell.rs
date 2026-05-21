@@ -11,18 +11,27 @@ impl Color {
     }
 }
 
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
+pub enum UnderlineStyle {
+    #[default]
+    None,
+    Straight,
+    Curly,
+}
+
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub struct Cell {
     pub ch: char,
     pub fg: Color,
     pub bg: Color,
     pub bold: bool,
-    pub underline: bool,
+    pub underline: UnderlineStyle,
+    pub underline_color: Option<Color>,
 }
 
 impl Cell {
     pub fn new(ch: char, fg: Color, bg: Color) -> Self {
-        Self { ch, fg, bg, bold: false, underline: false }
+        Self { ch, fg, bg, bold: false, underline: UnderlineStyle::None, underline_color: None }
     }
 }
 
@@ -33,7 +42,8 @@ impl Default for Cell {
             fg: Color::rgb(200, 200, 200),
             bg: Color::rgb(0, 0, 0),
             bold: false,
-            underline: false,
+            underline: UnderlineStyle::None,
+            underline_color: None,
         }
     }
 }

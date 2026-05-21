@@ -45,7 +45,7 @@ impl Buffer {
             if cx >= self.width {
                 break;
             }
-            self.set(cx, y, Cell { ch, fg, bg, bold: false, underline: false });
+            self.set(cx, y, Cell { ch, fg, bg, bold: false, underline: crate::cell::UnderlineStyle::None, underline_color: None });
         }
     }
 

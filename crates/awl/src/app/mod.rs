@@ -1,15 +1,19 @@
-use std::collections::{HashMap, HashSet};
+use std::collections::{HashMap, HashSet, VecDeque};
 use std::path::PathBuf;
 use std::time::{Instant, SystemTime, UNIX_EPOCH};
+use crate::editor::cursor::PointerShape;
+use crate::editor::view::MatchCache;
+
+pub mod events;
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 #[allow(dead_code)]
 pub enum StatusLevel { Log, Warn, Error }
 
-use editor::Buffer;
+use buffer::Buffer;
 use lsp::{LspDiagnostic, LspManager, SemanticToken};
 
-use crate::filetree::{self, Entry};
+use crate::explorer::tree::{self, Entry};
 use crate::git;
 
 pub struct HistoryEntry {
@@ -46,9 +50,10 @@ pub struct App {
     pub lsp_button_end: u16,
     pub hover_card: Option<crate::popup::HoverCard>,
     pub last_hover_pos: Option<(usize, usize)>,
+    pub last_hover_word: Option<(usize, usize, usize)>, // (row, word_start, word_end)
     pub hover_screen_pos: (u16, u16),
-    pub history_back: Vec<HistoryEntry>,
-    pub history_fwd: Vec<HistoryEntry>,
+    pub history_back: VecDeque<HistoryEntry>,
+    pub history_fwd: VecDeque<HistoryEntry>,
     pub editor_context_menu: Option<crate::popup::EditorContextMenu>,
     pub status_msg: String,
     pub status_level: StatusLevel,
@@ -71,11 +76,33 @@ pub struct App {
     pub recovery_dialog: Option<crate::popup::RecoveryDialog>,
     pub last_swap_tick: Instant,
     pub swap_versions: HashMap<PathBuf, i32>,
+    pub external_change_dialog: Option<crate::popup::ExternalChangeDialog>,
+    pub open_url_dialog: Option<crate::popup::OpenUrlDialog>,
+    pub finder: Option<crate::popup::FinderPopup>,
+    pub finder_history: Option<crate::popup::FinderPopup>,
+    pub finder_regex_history: Option<crate::popup::FinderPopup>,
+    pub finder_file_history: Option<crate::popup::FinderPopup>,
+    pub document_symbols: HashMap<PathBuf, Vec<lsp::DocumentSymbol>>,
+    pub breadcrumb_menu: Option<crate::popup::BreadcrumbMenu>,
+    pub tab_context_menu: Option<crate::popup::TabContextMenu>,
+    pub last_fs_event: Option<Instant>,
+    pub fs_pending_changes: HashSet<PathBuf>,
+    pub last_git_poll: Instant,
+    pub minimal_mode: bool,
+    pub pending_format_saves: HashSet<PathBuf>,
+    pub diag_sev_cache: HashMap<PathBuf, u8>,
+    pub diag_error_count: usize,
+    pub diag_warn_count: usize,
+    pub needs_git_refresh: bool,
+    pub pointer_shape: PointerShape,
+    pub last_mouse_pos: (u16, u16),
+    pub card_dragging: bool,
+    pub match_cache: Option<MatchCache>,
 }
 
 impl App {
     pub fn new(root: PathBuf) -> Self {
-        let tree = filetree::load(&root);
+        let tree = tree::load(&root);
         let (git_root, git_branch, git_status) = git::load(&root);
         Self {
             root, tree, tabs: Vec::new(), active_tab: 0,
@@ -85,7 +112,7 @@ impl App {
             git_root, git_branch, git_status,
             editor_focused: false,
             root_expanded: true,
-            explorer_width: 30,
+            explorer_width: 38,
             dragging_divider: false,
             context_menu: None,
             prompt: None,
@@ -97,9 +124,10 @@ impl App {
             lsp_button_end: 0,
             hover_card: None,
             last_hover_pos: None,
+            last_hover_word: None,
             hover_screen_pos: (0, 0),
-            history_back: Vec::new(),
-            history_fwd: Vec::new(),
+            history_back: VecDeque::new(),
+            history_fwd: VecDeque::new(),
             editor_context_menu: None,
             status_msg: "idle".to_string(),
             status_level: StatusLevel::Log,
@@ -122,10 +150,31 @@ impl App {
             recovery_dialog: None,
             last_swap_tick: Instant::now(),
             swap_versions: HashMap::new(),
+            external_change_dialog: None,
+            open_url_dialog: None,
+            finder: None,
+            finder_history: None,
+            finder_regex_history: None,
+            finder_file_history: None,
+            document_symbols: HashMap::new(),
+            breadcrumb_menu: None,
+            tab_context_menu: None,
+            last_fs_event: None,
+            fs_pending_changes: HashSet::new(),
+            last_git_poll: Instant::now(),
+            minimal_mode: false,
+            pending_format_saves: HashSet::new(),
+            diag_sev_cache: HashMap::new(),
+            diag_error_count: 0,
+            diag_warn_count: 0,
+            needs_git_refresh: false,
+            pointer_shape: PointerShape::Default,
+            last_mouse_pos: (0, 0),
+            card_dragging: false,
+            match_cache: None,
         }
     }
 
-    /// Show `msg` in the status bar for `duration_ms` milliseconds (0 = until replaced).
     pub fn set_status(&mut self, msg: impl Into<String>, duration_ms: u64, level: StatusLevel) {
         let msg = msg.into();
         let secs = SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default().as_secs();
@@ -140,8 +189,6 @@ impl App {
         };
     }
 
-    /// Write swap files for modified buffers whose content has changed since the last write.
-    /// Called every frame; does real work only every 10 seconds.
     pub fn tick_swaps(&mut self) {
         if self.last_swap_tick.elapsed().as_secs() < 10 {
             return;
@@ -164,7 +211,6 @@ impl App {
         }
     }
 
-    /// Called each frame; returns true if the message expired and display needs a refresh.
     pub fn tick_status(&mut self) -> bool {
         if let Some(exp) = self.status_expires {
             if Instant::now() >= exp {
@@ -194,21 +240,17 @@ impl App {
 
         self.root_expanded = true;
 
-        // Expand each ancestor directory from shallowest to deepest.
-        // Must be done in order: expanding a dir inserts its children into the flat vec,
-        // so deeper entries only exist after their parent is expanded.
         let mut current = self.root.clone();
         let components: Vec<_> = rel.components().collect();
         for comp in components.iter().take(components.len().saturating_sub(1)) {
             current.push(comp);
             if let Some(idx) = self.tree.iter().position(|e| e.path == current) {
                 if self.tree[idx].is_dir && !self.tree[idx].expanded {
-                    filetree::toggle(&mut self.tree, idx);
+                    tree::toggle(&mut self.tree, idx);
                 }
             }
         }
 
-        // Select and scroll to the target entry
         self.explorer_selection.clear();
         self.explorer_anchor = None;
         if let Some(idx) = self.tree.iter().position(|e| e.path == path) {
@@ -221,11 +263,34 @@ impl App {
         }
     }
 
-    pub fn refresh_git(&mut self) {
-        let (git_root, git_branch, git_status) = git::load(&self.root);
-        self.git_root = git_root;
-        self.git_branch = git_branch;
-        self.git_status = git_status;
+    pub fn rebuild_diag_cache(&mut self) {
+        let mut cache = HashMap::new();
+        let mut errors = 0usize;
+        let mut warns = 0usize;
+        for (path, diags) in &self.diagnostics {
+            for d in diags {
+                match d.severity {
+                    1 => errors += 1,
+                    2 => warns += 1,
+                    _ => {}
+                }
+            }
+            let worst = diags.iter().map(|d| d.severity).min().unwrap_or(255);
+            if worst <= 2 {
+                let e = cache.entry(path.clone()).or_insert(worst);
+                if worst < *e { *e = worst; }
+                let mut cur = path.parent();
+                while let Some(dir) = cur {
+                    if !dir.starts_with(&self.root) { break; }
+                    let e = cache.entry(dir.to_path_buf()).or_insert(worst);
+                    if worst < *e { *e = worst; }
+                    cur = dir.parent();
+                }
+            }
+        }
+        self.diag_sev_cache = cache;
+        self.diag_error_count = errors;
+        self.diag_warn_count = warns;
     }
 
     pub fn close_tab(&mut self, idx: usize) {
@@ -238,7 +303,6 @@ impl App {
 
     pub fn open_virtual(&mut self, path: PathBuf, text: String) {
         if let Some(idx) = self.tabs.iter().position(|t| t.path == path) {
-            // Already open — refresh content and scroll to end
             let buf = &mut self.tabs[idx];
             buf.rope = ropey::Rope::from_str(&text);
             buf.cursor_row = buf.line_count().saturating_sub(1);
@@ -259,6 +323,7 @@ impl App {
         if let Ok(buf) = Buffer::open(path) {
             let text = buf.rope.to_string();
             self.lsp.open(&buf.path, &text);
+            self.lsp.document_symbols(&buf.path);
             self.refresh_file_diff(&buf.path.clone());
             if let Some(swap_content) = crate::swap::read_if_different(&buf.path) {
                 self.recovery_dialog = Some(crate::popup::RecoveryDialog {
@@ -290,50 +355,47 @@ impl App {
     pub fn push_history(&mut self) {
         let Some(buf) = self.current() else { return };
         let entry = HistoryEntry { path: buf.path.clone(), row: buf.cursor_row, col: buf.cursor_col };
-        if self.history_back.last()
+        if self.history_back.back()
             .map(|e| e.path == entry.path && e.row == entry.row && e.col == entry.col)
             .unwrap_or(false)
         {
             return;
         }
-        self.history_back.push(entry);
-        if self.history_back.len() > 200 { self.history_back.remove(0); }
+        self.history_back.push_back(entry);
+        if self.history_back.len() > 200 { self.history_back.pop_front(); }
         self.history_fwd.clear();
     }
 
-    /// Push history only if the cursor has moved more than `line_threshold` lines
-    /// from the last entry, or is in a different file. Used for mouse clicks so
-    /// that tiny nearby clicks don't flood the history stack.
     pub fn push_history_if_distant(&mut self, line_threshold: usize) {
         let Some(buf) = self.current() else { return };
         let path = buf.path.clone();
         let row  = buf.cursor_row;
         let col  = buf.cursor_col;
-        let close = self.history_back.last().map(|e| {
+        let close = self.history_back.back().map(|e| {
             e.path == path && e.row.abs_diff(row) < line_threshold
         }).unwrap_or(false);
         if close { return; }
         let entry = HistoryEntry { path, row, col };
-        self.history_back.push(entry);
-        if self.history_back.len() > 200 { self.history_back.remove(0); }
+        self.history_back.push_back(entry);
+        if self.history_back.len() > 200 { self.history_back.pop_front(); }
         self.history_fwd.clear();
     }
 
     pub fn go_back(&mut self) -> bool {
-        let Some(entry) = self.history_back.pop() else { return false };
+        let Some(entry) = self.history_back.pop_back() else { return false };
         if let Some(buf) = self.current() {
             let cur = HistoryEntry { path: buf.path.clone(), row: buf.cursor_row, col: buf.cursor_col };
-            self.history_fwd.push(cur);
+            self.history_fwd.push_back(cur);
         }
         self.navigate_to(entry);
         true
     }
 
     pub fn go_forward(&mut self) -> bool {
-        let Some(entry) = self.history_fwd.pop() else { return false };
+        let Some(entry) = self.history_fwd.pop_back() else { return false };
         if let Some(buf) = self.current() {
             let cur = HistoryEntry { path: buf.path.clone(), row: buf.cursor_row, col: buf.cursor_col };
-            self.history_back.push(cur);
+            self.history_back.push_back(cur);
         }
         self.navigate_to(entry);
         true
@@ -358,7 +420,6 @@ impl App {
         self.editor_focused = true;
     }
 
-    /// Open (or refresh) the `[diagnostics]` virtual tab and populate `diagnostics_nav`.
     pub fn open_diagnostics(&mut self) {
         let mut lines: Vec<String> = Vec::new();
         let mut nav: Vec<Option<(PathBuf, usize, usize)>> = Vec::new();
@@ -387,7 +448,7 @@ impl App {
                 lines.push(format!("{:<5}  {}:{}:{}", sev, rel, d.row + 1, d.col_start + 1));
                 lines.push(format!("       {}", d.message));
                 nav.push(Some((path.clone(), d.row as usize, d.col_start as usize)));
-                nav.push(None); // message line — not navigable on its own
+                nav.push(None);
             }
         }
 
@@ -400,7 +461,6 @@ impl App {
         self.open_virtual(PathBuf::from("[diagnostics]"), lines.join("\n"));
     }
 
-    /// Navigate to the diagnostic referenced by the given line index of the `[diagnostics]` tab.
     pub fn goto_diagnostic(&mut self, line: usize) -> bool {
         let Some(Some((path, row, col))) = self.diagnostics_nav.get(line).cloned() else {
             return false;
