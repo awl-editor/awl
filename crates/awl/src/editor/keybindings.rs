@@ -6,7 +6,7 @@ use ui::layout::Layout;
 
 use crate::app::{App, StatusLevel, events::{AppEvent, HoverCmd}};
 use crate::editor::actions::word_at;
-use crate::editor::cursor::pointer_shape_for;
+use crate::editor::cursor::{PointerShape, pointer_shape_for};
 use crate::editor::gutter::gutter_width;
 use crate::editor::scrollbar::scrollbar_thumb;
 use crate::editor::selection::{char_at_visual, visual_col_of};
@@ -737,6 +737,12 @@ pub fn handle(
                     let desired_shape = pointer_shape_for(app, mx, my, w, h);
                     if desired_shape != app.pointer_shape {
                         app.pointer_shape = desired_shape;
+                    }
+
+                    let new_divider_hovered = desired_shape == PointerShape::ColResize;
+                    if new_divider_hovered != app.divider_hovered {
+                        app.divider_hovered = new_divider_hovered;
+                        dirty = true;
                     }
 
                     dirty = (had_card && app.hover_card.is_none()) || dirty;

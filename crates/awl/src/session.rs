@@ -53,13 +53,7 @@ pub fn save(app: &App) {
         .tabs
         .iter()
         .filter(|t| !t.virtual_tab)
-        .map(|t| TabState {
-            path: t.path.display().to_string(),
-            scroll_row: t.scroll_row,
-            scroll_col: t.scroll_col,
-            cursor_row: t.cursor_row,
-            cursor_col: t.cursor_col,
-        })
+        .map(|t| TabState { path: t.path.display().to_string(), scroll_row: t.scroll_row, scroll_col: t.scroll_col, cursor_row: t.cursor_row, cursor_col: t.cursor_col })
         .collect();
 
     // Map the current active_tab index into the filtered list.
@@ -93,18 +87,11 @@ pub fn load(root: &Path) -> Option<Session> {
     toml::from_str(&content).ok()
 }
 
-/// Restore a previously saved session into `app`.
-///
-/// Opens each tab, restores its scroll/cursor, expands saved explorer directories,
-/// and sets the active tab, tab-bar scroll, and explorer scroll.
 pub fn restore(app: &mut App, session: Session) {
-    // --- Explorer state ---
     app.root_expanded = session.root_expanded;
 
     if app.root_expanded {
-        // Expand saved directories in a single linear pass (parents before children).
-        let expanded_set: std::collections::HashSet<PathBuf> =
-            session.expanded_dirs.iter().map(PathBuf::from).collect();
+        let expanded_set: std::collections::HashSet<PathBuf> = session.expanded_dirs.iter().map(PathBuf::from).collect();
         let mut i = 0;
         while i < app.tree.len() {
             if app.tree[i].is_dir && !app.tree[i].expanded && expanded_set.contains(&app.tree[i].path) {
@@ -115,9 +102,6 @@ pub fn restore(app: &mut App, session: Session) {
     }
 
     app.explorer_scroll = session.explorer_scroll;
-
-    // --- Tabs ---
-    // Map session tab index → real app.tabs index, skipping files that no longer exist.
     let mut tab_map: Vec<usize> = Vec::new();
 
     for tab_state in &session.tabs {
@@ -127,23 +111,18 @@ pub fn restore(app: &mut App, session: Session) {
         }
         let app_idx = app.tabs.len();
         app.open_file(path.clone());
-        // open_file only pushes when it succeeds and the file wasn't already open.
+
         if app.tabs.len() > app_idx {
             let buf = &mut app.tabs[app_idx];
             let max_row = buf.line_count().saturating_sub(1);
             buf.cursor_row = tab_state.cursor_row.min(max_row);
-            buf.cursor_col = tab_state.cursor_col;
+            buf.cursor_col = tab_state.cursor_col.min(buf.line(buf.cursor_row).chars().count());
             buf.scroll_row = tab_state.scroll_row.min(max_row);
             buf.scroll_col = tab_state.scroll_col;
             tab_map.push(app_idx);
         }
     }
 
-    // Set active tab — fall back to first tab if the saved index is out of range.
     app.active_tab = tab_map.get(session.active_tab).copied().unwrap_or(0).min(app.tabs.len().saturating_sub(1));
-
     app.tab_scroll = session.tab_scroll.min(app.tabs.len().saturating_sub(1));
-
-    // Leave editor_focused = false so the user starts in a neutral state; the
-    // first click or keypress will focus the editor as usual.
 }

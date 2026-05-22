@@ -7,8 +7,12 @@ use crate::explorer::icons;
 use crate::tabs::naming::lsp_short_name;
 use crate::theme::*;
 
-pub fn draw_divider(buf: &mut Buffer, layout: &Layout) {
-    buf.fill(layout.divider, Cell::new('▕', divider(), bg_dark()));
+pub fn draw_divider(buf: &mut Buffer, app: &App, layout: &Layout) {
+    if app.divider_hovered || app.dragging_divider {
+        buf.fill(layout.divider, Cell::new('▌', diag_info(), bg_dark()));
+    } else {
+        buf.fill(layout.divider, Cell::new('▕', divider(), bg_dark()));
+    }
 }
 
 pub fn draw_statusbar(buf: &mut Buffer, app: &mut App, layout: &Layout) {
@@ -27,7 +31,7 @@ pub fn draw_statusbar(buf: &mut Buffer, app: &mut App, layout: &Layout) {
         .or_else(|| app.tabs.iter().filter(|b| !b.virtual_tab).find_map(|b| app.lsp.expected_for(&b.path)));
     let missing = expected.filter(|&k| !app.lsp.is_running(k));
 
-    let prefix = " \u{f121}  ";
+    let prefix = " \u{f0169} ";
     buf.write_str(x, y, prefix, sb_fg(), sb_lsp_bg());
     x += prefix.chars().count() as u16;
 

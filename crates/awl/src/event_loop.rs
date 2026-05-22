@@ -375,6 +375,10 @@ pub fn run<W: Write>(
 
         // ── Render ────────────────────────────────────────────────────────────
         if dirty {
+            let (pmx, pmy) = app.last_mouse_pos;
+            let desired = pointer_shape_for(app, pmx, pmy, w, h);
+            app.divider_hovered = desired == PointerShape::ColResize;
+
             if !is_motion {
                 update_highlights(app, tab_highlights);
             }
@@ -383,8 +387,6 @@ pub fn run<W: Write>(
             sync_cursor(out, app, w, h)?;
             render::set_terminal_title(out, app)?;
 
-            let (pmx, pmy) = app.last_mouse_pos;
-            let desired = pointer_shape_for(app, pmx, pmy, w, h);
             if desired != app.pointer_shape {
                 app.pointer_shape = desired;
                 write_pointer_shape(out, desired)?;
@@ -456,6 +458,9 @@ fn process_fs_changes(app: &mut App) {
         if path.components().any(|c| c.as_os_str() == ".git") {
             continue;
         }
+        if app.own_writes.remove(path) {
+            continue;
+        }
         let Some(tab_idx) = app.tabs.iter().position(|t| t.path == *path) else { continue };
         let Ok(disk_content) = std::fs::read_to_string(path) else { continue };
         let (is_modified, same) = {
@@ -492,6 +497,7 @@ fn write_pointer_shape<W: Write>(out: &mut W, shape: PointerShape) -> io::Result
     match shape {
         PointerShape::Text => write!(out, "\x1b]22;text\x07"),
         PointerShape::Pointer => write!(out, "\x1b]22;pointer\x07"),
+        PointerShape::ColResize => write!(out, "\x1b]22;ew-resize\x07"),
         PointerShape::Default => write!(out, "\x1b]22;\x07"),
     }
 }

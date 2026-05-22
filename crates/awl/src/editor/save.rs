@@ -18,6 +18,7 @@ pub fn do_save(app: &mut App, tx: &mpsc::Sender<AppEvent>) {
         }
     });
     if let Some((path, text)) = saved {
+        app.own_writes.insert(path.clone());
         swap::remove(&path);
         app.lsp.save(&path, &text);
         git::spawn_git_refresh(app.root.clone(), tx.clone());
@@ -33,6 +34,7 @@ pub fn do_save_path(app: &mut App, path: &Path, tx: &mpsc::Sender<AppEvent>) {
     if !app.tabs[idx].virtual_tab {
         let _ = app.tabs[idx].save();
         let path = app.tabs[idx].path.clone();
+        app.own_writes.insert(path.clone());
         swap::remove(&path);
         app.lsp.save(&path, &text);
         git::spawn_git_refresh(app.root.clone(), tx.clone());

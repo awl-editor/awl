@@ -9,6 +9,7 @@ pub enum PointerShape {
     Default,
     Text,
     Pointer,
+    ColResize,
 }
 
 pub fn pointer_shape_for(app: &App, mx: u16, my: u16, w: u16, h: u16) -> PointerShape {
@@ -78,6 +79,11 @@ pub fn pointer_shape_for(app: &App, mx: u16, my: u16, w: u16, h: u16) -> Pointer
     }
 
     let layout = Layout::compute_mode(w, h, app.explorer_width, app.minimal_mode);
+
+    // Divider: ColResize anywhere along the divider column.
+    if !app.minimal_mode && layout.divider.width > 0 && mx == layout.divider.x && my < layout.divider.y + layout.divider.height {
+        return PointerShape::ColResize;
+    }
 
     // Explorer: Pointer on the root row and on valid entry rows, Default elsewhere in the column.
     if mx < layout.explorer.x + layout.explorer.width && layout.explorer.width > 0 {

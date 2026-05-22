@@ -91,6 +91,7 @@ pub struct App {
     pub tab_context_menu: Option<crate::popup::TabContextMenu>,
     pub last_fs_event: Option<Instant>,
     pub fs_pending_changes: HashSet<PathBuf>,
+    pub own_writes: HashSet<PathBuf>,
     pub last_git_poll: Instant,
     pub minimal_mode: bool,
     pub pending_format_saves: HashSet<PathBuf>,
@@ -100,6 +101,7 @@ pub struct App {
     pub needs_git_refresh: bool,
     pub pointer_shape: PointerShape,
     pub last_mouse_pos: (u16, u16),
+    pub divider_hovered: bool,
     pub card_dragging: bool,
     pub match_cache: Option<MatchCache>,
     pub tab_scroll: usize,
@@ -175,6 +177,7 @@ impl App {
             tab_context_menu: None,
             last_fs_event: None,
             fs_pending_changes: HashSet::new(),
+            own_writes: HashSet::new(),
             last_git_poll: Instant::now(),
             minimal_mode: false,
             pending_format_saves: HashSet::new(),
@@ -184,6 +187,7 @@ impl App {
             needs_git_refresh: false,
             pointer_shape: PointerShape::Default,
             last_mouse_pos: (0, 0),
+            divider_hovered: false,
             card_dragging: false,
             match_cache: None,
             tab_scroll: 0,
@@ -437,7 +441,7 @@ impl App {
         if let Some(buf) = self.tabs.get_mut(self.active_tab) {
             buf.anchor = None;
             buf.cursor_row = entry.row.min(buf.line_count().saturating_sub(1));
-            buf.cursor_col = entry.col;
+            buf.cursor_col = entry.col.min(buf.line(buf.cursor_row).chars().count());
         }
         self.editor_focused = true;
     }
@@ -491,7 +495,7 @@ impl App {
         self.open_file(path);
         if let Some(b) = self.current_mut() {
             b.cursor_row = row.min(b.line_count().saturating_sub(1));
-            b.cursor_col = col;
+            b.cursor_col = col.min(b.line(b.cursor_row).chars().count());
         }
         self.editor_focused = true;
         true

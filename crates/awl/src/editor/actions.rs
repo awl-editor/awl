@@ -130,6 +130,10 @@ pub fn apply_workspace_edits(app: &mut App, edits: Vec<lsp::FileEdits>, label: O
                 tab.rope.remove(start..end);
                 tab.rope.insert(start, &edit.new_text);
             }
+            // Clamp cursor after content change — edits may have shortened lines.
+            let lc = tab.line_count();
+            tab.cursor_row = tab.cursor_row.min(lc.saturating_sub(1));
+            tab.cursor_col = tab.cursor_col.min(tab.line(tab.cursor_row).chars().count());
             tab.modified = true;
             tab.lsp_version += 1;
             to_sync.push((tab.path.clone(), tab.rope.to_string(), tab.lsp_version));

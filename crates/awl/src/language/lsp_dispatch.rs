@@ -75,7 +75,7 @@ pub fn handle(
                 app.open_file(path);
                 if let Some(b) = app.current_mut() {
                     b.cursor_row = (line as usize).min(b.line_count().saturating_sub(1));
-                    b.cursor_col = col as usize;
+                    b.cursor_col = (col as usize).min(b.line(b.cursor_row).chars().count());
                     b.update_scroll(eh, ew);
                 }
                 reveal_current(app, h);

@@ -26,7 +26,7 @@ pub fn draw(buf: &mut Buffer, app: &mut App, highlights: &[Option<highlight::Hig
         draw_tabbar(buf, app, &layout);
         draw_breadcrumb(buf, app, &layout);
         crate::explorer::view::draw_explorer(buf, app, &layout);
-        draw_divider(buf, &layout);
+        draw_divider(buf, app, &layout);
     }
     draw_editor(buf, app, &layout, highlights);
     draw_scrollbar(buf, app, &layout);
