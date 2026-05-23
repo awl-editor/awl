@@ -46,29 +46,11 @@ checksum = "c08606f8c3cbf4ce6ec8e28fb0014a2c086708fe954eaa885384a6165172e7e8"
 [[package]]
 name = "awl-core"
 version = "0.1.0"
-
-[[package]]
-name = "awl-editor"
-version = "0.1.0"
-dependencies = [
- "ropey",
-]
-
-[[package]]
-name = "awl-lsp"
-version = "0.1.0"
-dependencies = [
- "serde_json",
-]
-
-[[package]]
-name = "awl-tui"
-version = "0.1.0"
 dependencies = [
  "arboard",
- "awl-core",
  "awl-editor",
  "awl-lsp",
+ "awl-tui",
  "notify",
  "ropey",
  "serde",
@@ -89,6 +71,24 @@ dependencies = [
  "tree-sitter-rust",
  "tree-sitter-typescript",
 ]
+
+[[package]]
+name = "awl-editor"
+version = "0.1.0"
+dependencies = [
+ "ropey",
+]
+
+[[package]]
+name = "awl-lsp"
+version = "0.1.0"
+dependencies = [
+ "serde_json",
+]
+
+[[package]]
+name = "awl-tui"
+version = "0.1.0"
 
 [[package]]
 name = "bitflags"

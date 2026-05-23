@@ -1,8 +1,8 @@
 [workspace]
 members = [
-    "src/awl-tui",
-    "src/awl-editor",
     "src/awl-core",
+    "src/awl-editor",
+    "src/awl-tui",
     "src/awl-lsp",
 ]
 resolver = "2"
