@@ -1,12 +1,16 @@
 [package]
-name = "awl"
+name = "awl-tui"
 version = "0.1.0"
 edition = "2024"
 
+[[bin]]
+name = "awl"
+path = "src/main.rs"
+
 [dependencies]
-buffer = { path = "../editor", package = "editor" }
-ui = { path = "../ui" }
-lsp = { path = "../lsp" }
+buffer = { path = "../awl-editor", package = "awl-editor" }
+ui = { path = "../awl-core", package = "awl-core" }
+lsp = { path = "../awl-lsp", package = "awl-lsp" }
 termion = "4"
 arboard = "3"
 notify = "6"
