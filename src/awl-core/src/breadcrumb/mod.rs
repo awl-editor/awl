@@ -9,11 +9,11 @@ use crate::theme::*;
 // U+203A SINGLE RIGHT-POINTING ANGLE QUOTATION MARK
 const SEP: &str = " \u{203a} ";
 
-/// Returns all symbols whose range contains `row`, sorted outermost → innermost.
+/// returns all symbols whose range contains `row`, sorted outermost → innermost.
 pub fn symbols_at_row<'a>(symbols: &'a [lsp::DocumentSymbol], row: usize) -> Vec<&'a lsp::DocumentSymbol> {
     let row = row as u32;
     let mut containing: Vec<&lsp::DocumentSymbol> = symbols.iter().filter(|s| s.start_line <= row && row <= s.end_line).collect();
-    // Largest range = outermost scope
+    // largest range = outermost scope
     containing.sort_by(|a, b| (b.end_line - b.start_line).cmp(&(a.end_line - a.start_line)));
     containing
 }
@@ -60,7 +60,7 @@ pub fn draw_breadcrumb(buf: &mut Buffer, app: &App, layout: &Layout) {
         return;
     }
 
-    // Relative path
+    // relative path
     let rel = tab
         .path
         .strip_prefix(&app.root)
@@ -82,7 +82,7 @@ pub fn draw_breadcrumb(buf: &mut Buffer, app: &App, layout: &Layout) {
 
     write_trunc(buf, &mut x, &rel, fg_dim(), bg_main());
 
-    // Build the full enclosing symbol chain: namespace › struct › member
+    // build the entire enclosing symbol chain: namespace > struct > member
     let chain = app.document_symbols.get(&tab.path).map(|syms| symbols_at_row(syms, tab.cursor_row)).unwrap_or_default();
 
     for sym in chain {
@@ -104,7 +104,7 @@ pub fn draw_breadcrumb_menu(buf: &mut Buffer, menu: &mut BreadcrumbMenu, layout:
     let w = (label_w as u16 + 4).min(term_w);
     let h = vis as u16 + 2;
 
-    // Anchor below the breadcrumb row, aligned to where the symbol name starts
+    // anchor below the breadcrumb row, aligned to where the symbol name starts
     let mut sx = menu.anchor_x;
     let mut sy = layout.breadcrumb.y + 1;
     if sx + w > term_w {
@@ -154,7 +154,6 @@ pub fn draw_breadcrumb_menu(buf: &mut Buffer, menu: &mut BreadcrumbMenu, layout:
         buf.fill(ui::layout::Rect { x: sx, y: iy, width: w, height: 1 }, Cell::new(' ', name_fg, bg));
         buf.set(sx, iy, Cell::new('│', popup_border(), bg));
 
-        // Right border — scrollbar thumb when content overflows
         if show_scrollbar {
             let is_thumb = row >= thumb_top && row < thumb_top + thumb_h;
             let (sb_ch, sb_fg) = if is_thumb { ('▐', sb_thumb()) } else { ('│', popup_border()) };

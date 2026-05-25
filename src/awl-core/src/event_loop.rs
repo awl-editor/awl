@@ -31,6 +31,7 @@ pub fn run<W: Write>(
     hover_tx: mpsc::Sender<HoverCmd>,
 ) -> io::Result<()> {
     let mut pending_event: Option<AppEvent> = None;
+    let mut last_title = String::new();
 
     loop {
         let first = if let Some(e) = pending_event.take() {
@@ -62,13 +63,8 @@ pub fn run<W: Write>(
             latest
         } else {
             if let Some(AppEvent::Term(Event::Key(k))) = &first {
-                let is_nav = matches!(
-                    k,
-                    Key::Up | Key::Down | Key::Left | Key::Right
-                        | Key::ShiftUp | Key::ShiftDown
-                        | Key::ShiftLeft | Key::ShiftRight
-                        | Key::PageUp | Key::PageDown
-                );
+                let is_nav =
+                    matches!(k, Key::Up | Key::Down | Key::Left | Key::Right | Key::ShiftUp | Key::ShiftDown | Key::ShiftLeft | Key::ShiftRight | Key::PageUp | Key::PageDown);
                 if is_nav {
                     let k = k.clone();
                     loop {
@@ -179,12 +175,20 @@ pub fn run<W: Write>(
                         | Event::Mouse(MouseEvent::Press(MouseButton::WheelUp, ..))
                         | Event::Mouse(MouseEvent::Press(MouseButton::WheelDown, ..))
                         | Event::Key(
-                            Key::Up | Key::Down | Key::Left | Key::Right
-                                | Key::ShiftUp | Key::ShiftDown
-                                | Key::ShiftLeft | Key::ShiftRight
-                                | Key::PageUp | Key::PageDown
-                                | Key::Home | Key::End
-                                | Key::CtrlLeft | Key::CtrlRight
+                            Key::Up
+                                | Key::Down
+                                | Key::Left
+                                | Key::Right
+                                | Key::ShiftUp
+                                | Key::ShiftDown
+                                | Key::ShiftLeft
+                                | Key::ShiftRight
+                                | Key::PageUp
+                                | Key::PageDown
+                                | Key::Home
+                                | Key::End
+                                | Key::CtrlLeft
+                                | Key::CtrlRight
                                 | Key::Esc
                         )
                 );
@@ -193,9 +197,8 @@ pub fn run<W: Write>(
                 let mut nav_event = false;
                 let mut pending_completion: Option<(PathBuf, u32, u32)> = None;
 
-                // ── Modal dialogs (highest priority) ─────────────────────────
-                let (dlg_consumed, dlg_dirty, dlg_quit) =
-                    crate::dialog_events::handle_dialogs(app, &event, &app_tx, h);
+                // modal dialogs (they always have the highest priority)
+                let (dlg_consumed, dlg_dirty, dlg_quit) = crate::dialog_events::handle_dialogs(app, &event, &app_tx, h);
                 if dlg_consumed {
                     consumed = true;
                     dirty = dlg_dirty;
@@ -204,7 +207,7 @@ pub fn run<W: Write>(
                     }
                 }
 
-                // ── Finder ───────────────────────────────────────────────────
+                // finder
                 if !consumed && app.finder.is_some() {
                     let (c, d) = crate::popup::finder_events::handle(app, &event, nav_repeat, h, eh, ew, w, &app_tx);
                     if c {
@@ -213,7 +216,7 @@ pub fn run<W: Write>(
                     }
                 }
 
-                // ── Tab / breadcrumb context menus ───────────────────────────
+                // tab / breadcrumb context menus
                 if !consumed && app.tab_context_menu.is_some() {
                     let (c, d) = crate::menu_events::handle_tab_context_menu(app, &event, h, &app_tx);
                     if c {
@@ -229,7 +232,7 @@ pub fn run<W: Write>(
                     }
                 }
 
-                // ── Completion menu ──────────────────────────────────────────
+                // completion menu
                 if !consumed && app.completion_menu.is_some() {
                     let (c, d) = handle_completion_menu(app, &event, eh, ew);
                     if c {
@@ -238,7 +241,7 @@ pub fn run<W: Write>(
                     }
                 }
 
-                // ── Editor / LSP / explorer context menus ────────────────────
+                // Editor / LSP / explorer context menus
                 if !consumed {
                     let (c, d) = crate::menu_events::handle_editor_context_menu(app, &event, eh, ew, &app_tx);
                     if c {
@@ -261,7 +264,7 @@ pub fn run<W: Write>(
                     }
                 }
 
-                // ── Explorer keyboard navigation ──────────────────────────────
+                // explorer keyboard navigation
                 if !consumed {
                     let (c, d) = crate::explorer::keyboard::handle(app, &event, &layout);
                     if c {
@@ -270,7 +273,8 @@ pub fn run<W: Write>(
                     }
                 }
 
-                // ── Ctrl+C on hover-card selection ────────────────────────────
+                // Ctrl+C on hover-card selection, this is very useful for copying inline docs
+                // TODO: maybe integrate this into the rest of the app properly, it probably shouldn't be here
                 if !consumed && matches!(&event, Event::Key(Key::Ctrl('c'))) {
                     let card_text = app.hover_card.as_ref().and_then(|card| {
                         let anchor = card.sel_anchor?;
@@ -289,7 +293,7 @@ pub fn run<W: Write>(
                     }
                 }
 
-                // ── Any key press: reset editor focus and dismiss hover ───────
+                // any key press: reset editor focus and dismiss hover
                 if !consumed && matches!(&event, Event::Key(_)) {
                     app.editor_focused = true;
                     app.hover_card = None;
@@ -298,13 +302,15 @@ pub fn run<W: Write>(
                     let _ = hover_tx.send(HoverCmd::Cancel);
                 }
 
-                // ── Main event handler ────────────────────────────────────────
+                // main event handler
                 if !consumed {
                     let old_shape = app.pointer_shape;
-                    let (d, q, nav, comp) =
-                        crate::editor::keybindings::handle(app, event, nav_repeat, eh, ew, h, w, &layout, &hover_tx, &app_tx);
+                    let cur_highlights = tab_highlights.get(app.active_tab).and_then(|h| h.as_ref());
+                    let (d, q, nav, comp) = crate::editor::keybindings::handle(app, event, nav_repeat, eh, ew, h, w, &layout, &hover_tx, &app_tx, cur_highlights);
                     dirty = d;
-                    if q { quit = true; }
+                    if q {
+                        quit = true;
+                    }
                     nav_event = nav;
                     pending_completion = comp;
                     if app.pointer_shape != old_shape {
@@ -321,14 +327,10 @@ pub fn run<W: Write>(
                     break;
                 }
 
-                // ── LSP sync (didChange must precede completion request) ──────
-                let sync_info = app.current().and_then(|buf| {
-                    if buf.modified && buf.lsp_version != buf.lsp_synced_version {
-                        Some((buf.path.clone(), buf.rope.to_string(), buf.lsp_version))
-                    } else {
-                        None
-                    }
-                });
+                // LSP sync; didChange must precede completion request)
+                let sync_info = app
+                    .current()
+                    .and_then(|buf| if buf.modified && buf.lsp_version != buf.lsp_synced_version { Some((buf.path.clone(), buf.rope.to_string(), buf.lsp_version)) } else { None });
                 if let Some((path, text, version)) = sync_info {
                     app.lsp.change(&path, &text, version);
                     if let Some(buf) = app.current_mut() {
@@ -341,28 +343,30 @@ pub fn run<W: Write>(
             }
         }
 
-        // ── LSP poll ─────────────────────────────────────────────────────────
+        // LSP poll
         if language::lsp_dispatch::handle(app, &app_tx, eh, ew, h, w) {
             dirty = true;
         }
 
-        if app.tick_status() { dirty = true; }
+        if app.tick_status() {
+            dirty = true;
+        }
         app.tick_swaps();
 
-        // ── Debounced filesystem-change processing ────────────────────────────
+        // debounced filesystem-change processing
         if app.last_fs_event.map(|t| t.elapsed() >= Duration::from_millis(200)).unwrap_or(false) {
             dirty = true;
             is_motion = false;
             process_fs_changes(app);
         }
 
-        // ── Periodic git poll (~5 s) ──────────────────────────────────────────
+        // periodic git poll
         if app.last_git_poll.elapsed() >= Duration::from_secs(5) {
             app.last_git_poll = std::time::Instant::now();
             crate::git::spawn_git_refresh(app.root.clone(), app_tx.clone());
         }
 
-        // ── Terminal resize ───────────────────────────────────────────────────
+        // terminal size
         if let Ok((new_w, new_h)) = termion::terminal_size() {
             if new_w != w || new_h != h {
                 w = new_w;
@@ -373,7 +377,7 @@ pub fn run<W: Write>(
             }
         }
 
-        // ── Render ────────────────────────────────────────────────────────────
+        // render all
         if dirty {
             let (pmx, pmy) = app.last_mouse_pos;
             let desired = pointer_shape_for(app, pmx, pmy, w, h);
@@ -384,10 +388,7 @@ pub fn run<W: Write>(
             }
             if app.dump_screen {
                 app.dump_screen = false;
-                let ts = std::time::SystemTime::now()
-                    .duration_since(std::time::UNIX_EPOCH)
-                    .unwrap_or_default()
-                    .as_secs();
+                let ts = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_secs();
                 let path = std::path::PathBuf::from(format!("/tmp/awl-{ts}.ansi"));
                 match renderer.dump_previous(&path) {
                     Ok(()) => app.set_status(format!("dumped → {}", path.display()), 3000, StatusLevel::Log),
@@ -398,7 +399,11 @@ pub fn run<W: Write>(
             render::draw(renderer.buffer_mut(), app, tab_highlights, w, h);
             renderer.flush(out)?;
             sync_cursor(out, app, w, h)?;
-            render::set_terminal_title(out, app)?;
+            let title = render::terminal_title(app);
+            if title != last_title {
+                render::set_terminal_title(out, &title)?;
+                last_title = title;
+            }
 
             if desired != app.pointer_shape {
                 app.pointer_shape = desired;
@@ -413,11 +418,15 @@ pub fn run<W: Write>(
 fn handle_completion_menu(app: &mut App, event: &Event, eh: usize, ew: usize) -> (bool, bool) {
     match event {
         Event::Key(Key::Up) => {
-            if let Some(m) = &mut app.completion_menu { m.move_up(); }
+            if let Some(m) = &mut app.completion_menu {
+                m.move_up();
+            }
             (true, true)
         }
         Event::Key(Key::Down) => {
-            if let Some(m) = &mut app.completion_menu { m.move_down(); }
+            if let Some(m) = &mut app.completion_menu {
+                m.move_down();
+            }
             (true, true)
         }
         Event::Key(Key::Esc) => {
@@ -425,24 +434,20 @@ fn handle_completion_menu(app: &mut App, event: &Event, eh: usize, ew: usize) ->
             (true, true)
         }
         Event::Key(Key::Char('\t')) | Event::Key(Key::Char('\n')) | Event::Key(Key::Char('\r')) => {
-            let accept = app.completion_menu.as_ref().and_then(|m| {
-                m.selected_item().map(|item| (item.clone(), m.word_start_col, m.buf_row))
-            });
+            let accept = app.completion_menu.as_ref().and_then(|m| m.selected_item().map(|item| (item.clone(), m.word_start_col, m.buf_row)));
             app.completion_menu = None;
             if let Some((item, ws, row)) = accept {
                 accept_completion(app, item, ws, row, eh, ew);
             }
             (true, true)
         }
-        Event::Key(Key::Char(ch))
-            if ch.is_alphanumeric() || *ch == '_' || *ch == '.' || *ch == ':' || *ch == '>' =>
-        {
-            // Fall through to normal char handler; menu re-filters there.
+        Event::Key(Key::Char(ch)) if ch.is_alphanumeric() || *ch == '_' || *ch == '.' || *ch == ':' || *ch == '>' => {
+            // fall through to normal char handler; menu re-filters there.
             (false, false)
         }
         Event::Key(_) => {
             app.completion_menu = None;
-            // Let event fall through.
+            // let event fall through.
             (false, true)
         }
         _ => {
@@ -456,11 +461,8 @@ fn process_fs_changes(app: &mut App) {
     app.last_fs_event = None;
     let changed_paths: Vec<PathBuf> = app.fs_pending_changes.drain().collect();
 
-    let needs_reload = changed_paths.iter().any(|p| {
-        p.parent()
-            .map(|parent| parent == app.root || app.tree.iter().any(|e| e.is_dir && e.expanded && e.path == parent))
-            .unwrap_or(false)
-    });
+    let needs_reload =
+        changed_paths.iter().any(|p| p.parent().map(|parent| parent == app.root || app.tree.iter().any(|e| e.is_dir && e.expanded && e.path == parent)).unwrap_or(false));
     if needs_reload {
         let (new_tree, new_sel) = crate::explorer::tree::reload(&app.root, &app.tree, app.explorer_selected);
         app.tree = new_tree;
@@ -480,13 +482,12 @@ fn process_fs_changes(app: &mut App) {
             let tab = &app.tabs[tab_idx];
             (tab.modified, tab.rope.to_string() == disk_content)
         };
-        if same { continue; }
+        if same {
+            continue;
+        }
         if is_modified {
             if app.external_change_dialog.is_none() {
-                app.external_change_dialog = Some(crate::popup::ExternalChangeDialog {
-                    path: path.clone(),
-                    disk_content,
-                });
+                app.external_change_dialog = Some(crate::popup::ExternalChangeDialog { path: path.clone(), disk_content });
             }
         } else {
             let sync_ver = {

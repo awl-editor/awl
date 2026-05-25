@@ -9,16 +9,9 @@ use lsp;
 
 use super::render_prose_line;
 
-/// Drains all pending LSP messages and applies them to app state.
-/// Returns true if any message requires a redraw.
-pub fn handle(
-    app: &mut App,
-    tx: &mpsc::Sender<AppEvent>,
-    eh: usize,
-    ew: usize,
-    h: u16,
-    w: u16,
-) -> bool {
+/// drains all pending LSP messages and applies them to app state.
+/// returns true if any message requires a redraw.
+pub fn handle(app: &mut App, tx: &mpsc::Sender<AppEvent>, eh: usize, ew: usize, h: u16, w: u16) -> bool {
     let mut dirty = false;
     for msg in app.lsp.poll() {
         match msg {
@@ -61,12 +54,7 @@ pub fn handle(
                             }
                         }
                     }
-                    app.hover_card = Some(popup::HoverCard {
-                        lines, x, y, scroll: 0,
-                        cx: 0, cy: 0, cw: 0, ch: 0,
-                        link_zones: Vec::new(),
-                        sel_anchor: None, sel_cursor: None,
-                    });
+                    app.hover_card = Some(popup::HoverCard { lines, x, y, scroll: 0, cx: 0, cy: 0, cw: 0, ch: 0, link_zones: Vec::new(), sel_anchor: None, sel_cursor: None });
                     dirty = true;
                 }
             }
@@ -89,10 +77,7 @@ pub fn handle(
                 dirty = true;
             }
             lsp::ServerMessage::CodeActions { path, row, col, items } => {
-                let menu_matches = app.editor_context_menu
-                    .as_ref()
-                    .map(|m| m.path == path && m.buf_row == row as usize && m.buf_col == col as usize)
-                    .unwrap_or(false);
+                let menu_matches = app.editor_context_menu.as_ref().map(|m| m.path == path && m.buf_row == row as usize && m.buf_col == col as usize).unwrap_or(false);
                 if menu_matches {
                     app.pending_code_actions = items;
                     let actions_snapshot = app.pending_code_actions.clone();
@@ -106,12 +91,7 @@ pub fn handle(
             lsp::ServerMessage::Completions { path, req_row, req_col, items } => {
                 let menu_data = app
                     .current()
-                    .filter(|b| {
-                        b.path == path
-                            && !b.virtual_tab
-                            && b.cursor_row as u32 == req_row
-                            && (b.cursor_col as i64 - req_col as i64).unsigned_abs() <= 80
-                    })
+                    .filter(|b| b.path == path && !b.virtual_tab && b.cursor_row as u32 == req_row && (b.cursor_col as i64 - req_col as i64).unsigned_abs() <= 80)
                     .map(|b| {
                         let cursor = b.cursor_col;
                         let line = b.line(b.cursor_row);

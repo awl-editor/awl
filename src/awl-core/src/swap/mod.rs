@@ -23,7 +23,7 @@ pub fn swap_path_for(file_path: &Path) -> PathBuf {
     swap_dir().join(format!("{:016x}_{}.swp", hash, stem))
 }
 
-/// Write swap file. Format: first line is the absolute path, rest is file content.
+/// write swap file: first line is the absolute path, rest is file content.
 pub fn write(file_path: &Path, content: &str) {
     let sp = swap_path_for(file_path);
     if let Some(parent) = sp.parent() {
@@ -39,8 +39,8 @@ pub fn remove(file_path: &Path) {
     let _ = std::fs::remove_file(swap_path_for(file_path));
 }
 
-/// Returns the swap content if a swap exists and its content differs from disk.
-/// Cleans up the swap automatically when content already matches disk.
+/// returns the swap content if a swap exists and its content differs from disk.
+/// cleans up the swap automatically when content already matches disk.
 pub fn read_if_different(file_path: &Path) -> Option<String> {
     let sp = swap_path_for(file_path);
     let data = std::fs::read_to_string(&sp).ok()?;

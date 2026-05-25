@@ -86,7 +86,7 @@ pub fn handle_click(app: &mut App, layout: &Layout, x: u16, y: u16, h: u16, eh: 
             }
             let name = tab_name(tab);
             let dot_len: u16 = if tab.modified { 2 } else { 0 };
-            // space(1) + icon(1) + space(1) + name + dot + close(3) — matches draw_tabbar exactly
+
             let tab_width = 6 + name.len() as u16 + dot_len;
             let close_x = tx + 4 + name.len() as u16 + dot_len;
             if x >= tx && x < tx + tab_width {
@@ -124,7 +124,9 @@ pub fn handle_click(app: &mut App, layout: &Layout, x: u16, y: u16, h: u16, eh: 
         let entry_start = root_y + 1;
         if y >= entry_start && app.root_expanded {
             let y_offset = (y - entry_start) as usize;
-            let Some(i) = explorer::view::explorer_click_index(app, layout, y_offset) else { return; };
+            let Some(i) = explorer::view::explorer_click_index(app, layout, y_offset) else {
+                return;
+            };
             {
                 app.explorer_selected = i;
                 app.explorer_selection.clear();

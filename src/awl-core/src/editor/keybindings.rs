@@ -4,18 +4,22 @@ use std::sync::mpsc;
 use termion::event::{Event, Key, MouseButton, MouseEvent};
 use ui::layout::Layout;
 
-use crate::app::{App, StatusLevel, events::{AppEvent, HoverCmd}};
+use crate::app::{
+    App, StatusLevel,
+    events::{AppEvent, HoverCmd},
+};
 use crate::editor::actions::word_at;
 use crate::editor::cursor::{PointerShape, pointer_shape_for};
 use crate::editor::gutter::gutter_width;
 use crate::editor::scrollbar::scrollbar_thumb;
 use crate::editor::selection::{char_at_visual, visual_col_of};
+use crate::highlight::Highlights;
 use crate::input::clipboard::{get_clipboard, set_clipboard};
 use crate::input::mouse::{handle_click, handle_double_click, handle_triple_click, mouse_motion_pos, parse_sgr_press, reveal_current};
 use crate::popup;
 
-/// Handles all unconsumed terminal events (keys, mouse, escape sequences).
-/// Returns `(dirty, quit, nav_event, pending_completion)`.
+/// handles all unconsumed terminal events (keys, mouse, escape sequences).
+/// returns `(dirty, quit, nav_event, pending_completion)`.
 pub fn handle(
     app: &mut App,
     event: Event,
@@ -27,6 +31,7 @@ pub fn handle(
     layout: &Layout,
     hover_tx: &mpsc::Sender<HoverCmd>,
     tx: &mpsc::Sender<AppEvent>,
+    highlights: Option<&Highlights>,
 ) -> (bool, bool, bool, Option<(PathBuf, u32, u32)>) {
     let mut dirty = true;
     let mut quit = false;
@@ -35,8 +40,7 @@ pub fn handle(
 
     match event {
         Event::Key(Key::Ctrl('q')) => {
-            let modified: Vec<PathBuf> =
-                app.tabs.iter().filter(|t| !t.virtual_tab && t.modified).map(|t| t.path.clone()).collect();
+            let modified: Vec<PathBuf> = app.tabs.iter().filter(|t| !t.virtual_tab && t.modified).map(|t| t.path.clone()).collect();
             if modified.is_empty() {
                 quit = true;
             } else {
@@ -266,12 +270,7 @@ pub fn handle(
                         let next = b.line(b.cursor_row).chars().nth(b.cursor_col);
                         let is_pair = matches!(
                             (prev, next),
-                            (Some('('), Some(')'))
-                                | (Some('['), Some(']'))
-                                | (Some('{'), Some('}'))
-                                | (Some('"'), Some('"'))
-                                | (Some('\''), Some('\''))
-                                | (Some('`'), Some('`'))
+                            (Some('('), Some(')')) | (Some('['), Some(']')) | (Some('{'), Some('}')) | (Some('"'), Some('"')) | (Some('\''), Some('\'')) | (Some('`'), Some('`'))
                         );
                         if is_pair {
                             b.delete_forward();
@@ -304,10 +303,7 @@ pub fn handle(
         }
 
         Event::Key(Key::Char('\n')) => {
-            let is_diag_tab = app
-                .current()
-                .map(|b| b.virtual_tab && b.path == std::path::Path::new("[diagnostics]"))
-                .unwrap_or(false);
+            let is_diag_tab = app.current().map(|b| b.virtual_tab && b.path == std::path::Path::new("[diagnostics]")).unwrap_or(false);
             if is_diag_tab {
                 let row = app.current().map(|b| b.cursor_row).unwrap_or(0);
                 if app.goto_diagnostic(row) {
@@ -344,18 +340,20 @@ pub fn handle(
                 if b.selection_range().is_some() {
                     b.delete_selection();
                 }
+                let in_comment = highlights.map(|h| crate::highlight::cursor_in_comment(h, b.cursor_row, b.cursor_col)).unwrap_or(false);
                 let next = b.line(b.cursor_row).chars().nth(b.cursor_col);
                 match ch {
-                    ')' | ']' | '}' if next == Some(ch) => {
+                    ')' | ']' | '}' if !in_comment && next == Some(ch) => {
                         b.move_right();
                     }
-                    '"' | '\'' | '`' if next == Some(ch) => {
+                    '"' | '\'' | '`' if !in_comment && next == Some(ch) => {
                         b.move_right();
                     }
-                    '*' if {
+                    '*' if !in_comment && {
                         let prev = b.cursor_col.checked_sub(1).and_then(|c| b.line(b.cursor_row).chars().nth(c));
                         prev == Some('/')
-                    } => {
+                    } =>
+                    {
                         b.insert_char('*');
                         b.insert_char(' ');
                         b.insert_char('*');
@@ -364,7 +362,7 @@ pub fn handle(
                         b.move_left();
                         b.move_left();
                     }
-                    '(' | '[' | '{' | '"' | '\'' | '`' => {
+                    '(' | '[' | '{' | '"' | '\'' | '`' if !in_comment => {
                         let close = match ch {
                             '(' => ')',
                             '[' => ']',
@@ -517,9 +515,7 @@ pub fn handle(
         }
 
         Event::Key(Key::F(12)) => {
-            let info = app.current()
-                .filter(|b| !b.virtual_tab)
-                .map(|b| (b.path.clone(), b.cursor_row as u32, b.cursor_col as u32));
+            let info = app.current().filter(|b| !b.virtual_tab).map(|b| (b.path.clone(), b.cursor_row as u32, b.cursor_col as u32));
             if let Some((path, row, col)) = info {
                 if app.lsp.has_server_for(&path) {
                     app.lsp.goto(lsp::GotoKind::Definition, &path, row, col);
@@ -527,12 +523,10 @@ pub fn handle(
             }
         }
         Event::Key(Key::F(2)) => {
-            let info = app.current()
-                .filter(|b| !b.virtual_tab)
-                .map(|b| {
-                    let word = word_at(b, b.cursor_row, b.cursor_col);
-                    (b.path.clone(), word, b.cursor_row as u32, b.cursor_col as u32)
-                });
+            let info = app.current().filter(|b| !b.virtual_tab).map(|b| {
+                let word = word_at(b, b.cursor_row, b.cursor_col);
+                (b.path.clone(), word, b.cursor_row as u32, b.cursor_col as u32)
+            });
             if let Some((path, word, row, col)) = info {
                 if app.lsp.has_server_for(&path) {
                     app.prompt = Some(popup::InputPrompt::rename_symbol(path, word, row, col));
@@ -622,9 +616,7 @@ pub fn handle(
             }
             // Shift+F12 → Go to Implementation
             b"\x1b[24;2~" => {
-                let info = app.current()
-                    .filter(|b| !b.virtual_tab)
-                    .map(|b| (b.path.clone(), b.cursor_row as u32, b.cursor_col as u32));
+                let info = app.current().filter(|b| !b.virtual_tab).map(|b| (b.path.clone(), b.cursor_row as u32, b.cursor_col as u32));
                 if let Some((path, row, col)) = info {
                     if app.lsp.has_server_for(&path) {
                         app.lsp.goto(lsp::GotoKind::Implementation, &path, row, col);
@@ -633,9 +625,7 @@ pub fn handle(
             }
             // Ctrl+F12 → Go to Type Definition
             b"\x1b[24;5~" => {
-                let info = app.current()
-                    .filter(|b| !b.virtual_tab)
-                    .map(|b| (b.path.clone(), b.cursor_row as u32, b.cursor_col as u32));
+                let info = app.current().filter(|b| !b.virtual_tab).map(|b| (b.path.clone(), b.cursor_row as u32, b.cursor_col as u32));
                 if let Some((path, row, col)) = info {
                     if app.lsp.has_server_for(&path) {
                         app.lsp.goto(lsp::GotoKind::TypeDefinition, &path, row, col);
@@ -700,16 +690,9 @@ pub fn handle(
                     }
                 } else if let Some((mx, my)) = mouse_motion_pos(&bytes) {
                     app.last_mouse_pos = (mx, my);
-                    let in_card = app
-                        .hover_card
-                        .as_ref()
-                        .map(|c| c.cw > 0 && mx >= c.cx && mx < c.cx + c.cw && my >= c.cy && my < c.cy + c.ch)
-                        .unwrap_or(false);
+                    let in_card = app.hover_card.as_ref().map(|c| c.cw > 0 && mx >= c.cx && mx < c.cx + c.cw && my >= c.cy && my < c.cy + c.ch).unwrap_or(false);
                     let text_x = layout.editor.x + gutter_width(app);
-                    let in_editor = mx >= text_x
-                        && my >= layout.editor.y
-                        && my < layout.editor.y + layout.editor.height
-                        && mx < layout.editor.x + layout.editor.width;
+                    let in_editor = mx >= text_x && my >= layout.editor.y && my < layout.editor.y + layout.editor.height && mx < layout.editor.x + layout.editor.width;
 
                     if in_card {
                         // Mouse is over the hover card — keep it visible
@@ -729,13 +712,7 @@ pub fn handle(
                                 app.last_hover_pos = Some((buf_row, buf_col));
                                 app.last_hover_word = Some(word_key);
                                 app.hover_card = None;
-                                let _ = hover_tx.send(HoverCmd::Set {
-                                    row: buf_row as u32,
-                                    col: buf_col as u32,
-                                    path,
-                                    screen_x: word_screen_x,
-                                    screen_y: my,
-                                });
+                                let _ = hover_tx.send(HoverCmd::Set { row: buf_row as u32, col: buf_col as u32, path, screen_x: word_screen_x, screen_y: my });
                             }
                         }
                     } else if app.hover_card.is_some() || app.last_hover_pos.is_some() {
@@ -746,11 +723,7 @@ pub fn handle(
                     }
 
                     // Track tab close-button hover for visual feedback
-                    let new_hovered = if !app.minimal_mode {
-                        crate::tabs::view::tab_close_at(app, layout, mx, my)
-                    } else {
-                        None
-                    };
+                    let new_hovered = if !app.minimal_mode { crate::tabs::view::tab_close_at(app, layout, mx, my) } else { None };
                     if new_hovered != app.hovered_close {
                         app.hovered_close = new_hovered;
                         dirty = true;
@@ -786,15 +759,9 @@ pub fn handle(
                     app.last_click_time = Some(now);
                     app.last_click_pos = (x, y);
 
-                    let card_link_hit = app
-                        .hover_card
-                        .as_ref()
-                        .and_then(|c| c.link_zones.iter().find(|&&(xs, xe, ly, _)| y == ly && x >= xs && x < xe).map(|(_, _, _, url)| url.clone()));
-                    let in_card_bounds = app
-                        .hover_card
-                        .as_ref()
-                        .map(|c| c.cw > 0 && x >= c.cx && x < c.cx + c.cw && y >= c.cy && y < c.cy + c.ch)
-                        .unwrap_or(false);
+                    let card_link_hit =
+                        app.hover_card.as_ref().and_then(|c| c.link_zones.iter().find(|&&(xs, xe, ly, _)| y == ly && x >= xs && x < xe).map(|(_, _, _, url)| url.clone()));
+                    let in_card_bounds = app.hover_card.as_ref().map(|c| c.cw > 0 && x >= c.cx && x < c.cx + c.cw && y >= c.cy && y < c.cy + c.ch).unwrap_or(false);
 
                     if let Some(url) = card_link_hit {
                         app.open_url_dialog = Some(popup::OpenUrlDialog { url });
@@ -818,11 +785,7 @@ pub fn handle(
                         app.dragging = false;
                         app.dragging_divider = false;
                         app.dragging_scrollbar = false;
-                    } else if layout.scrollbar.width > 0
-                        && x == layout.scrollbar.x
-                        && y >= layout.scrollbar.y
-                        && y < layout.scrollbar.y + layout.scrollbar.height
-                    {
+                    } else if layout.scrollbar.width > 0 && x == layout.scrollbar.x && y >= layout.scrollbar.y && y < layout.scrollbar.y + layout.scrollbar.height {
                         app.dragging_divider = false;
                         app.dragging = false;
                         app.dragging_scrollbar = true;
@@ -858,8 +821,7 @@ pub fn handle(
                                     .strip_prefix(&app.root)
                                     .map(|p| p.to_string_lossy().chars().count())
                                     .unwrap_or_else(|_| tab.path.file_name().map(|n| n.to_string_lossy().chars().count()).unwrap_or(0));
-                                (layout.breadcrumb.x + 1 + rel_len as u16 + 3)
-                                    .min(layout.breadcrumb.x + layout.breadcrumb.width.saturating_sub(1))
+                                (layout.breadcrumb.x + 1 + rel_len as u16 + 3).min(layout.breadcrumb.x + layout.breadcrumb.width.saturating_sub(1))
                             })
                             .unwrap_or(layout.breadcrumb.x);
                         let syms = app.current().and_then(|b| app.document_symbols.get(&b.path));
@@ -959,11 +921,8 @@ pub fn handle(
                             let path = b.path.clone();
                             let has_lsp = app.lsp.has_server_for(&path);
                             if has_lsp {
-                                let row_diags: Vec<lsp::LspDiagnostic> = app
-                                    .diagnostics
-                                    .get(&path)
-                                    .map(|d| d.iter().filter(|d| d.row as usize == buf_row).cloned().collect())
-                                    .unwrap_or_default();
+                                let row_diags: Vec<lsp::LspDiagnostic> =
+                                    app.diagnostics.get(&path).map(|d| d.iter().filter(|d| d.row as usize == buf_row).cloned().collect()).unwrap_or_default();
                                 app.lsp.code_action(&path, buf_row as u32, buf_col as u32, &row_diags);
                             }
                             let mut menu = popup::EditorContextMenu::new(x, y, path, buf_row, buf_col, has_lsp);
@@ -998,11 +957,7 @@ pub fn handle(
                     }
                 }
                 MouseButton::WheelUp => {
-                    let in_card = app
-                        .hover_card
-                        .as_ref()
-                        .map(|c| c.cw > 0 && x >= c.cx && x < c.cx + c.cw && y >= c.cy && y < c.cy + c.ch)
-                        .unwrap_or(false);
+                    let in_card = app.hover_card.as_ref().map(|c| c.cw > 0 && x >= c.cx && x < c.cx + c.cw && y >= c.cy && y < c.cy + c.ch).unwrap_or(false);
                     if in_card {
                         if let Some(c) = &mut app.hover_card {
                             c.scroll = c.scroll.saturating_sub(3);
@@ -1016,11 +971,7 @@ pub fn handle(
                     }
                 }
                 MouseButton::WheelDown => {
-                    let in_card = app
-                        .hover_card
-                        .as_ref()
-                        .map(|c| c.cw > 0 && x >= c.cx && x < c.cx + c.cw && y >= c.cy && y < c.cy + c.ch)
-                        .unwrap_or(false);
+                    let in_card = app.hover_card.as_ref().map(|c| c.cw > 0 && x >= c.cx && x < c.cx + c.cw && y >= c.cy && y < c.cy + c.ch).unwrap_or(false);
                     if in_card {
                         if let Some(c) = &mut app.hover_card {
                             c.scroll = c.scroll.saturating_add(3);

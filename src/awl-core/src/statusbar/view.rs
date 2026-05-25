@@ -90,14 +90,12 @@ pub fn draw_statusbar(buf: &mut Buffer, app: &mut App, layout: &Layout) {
     let status_w = status_label.chars().count() as u16;
 
     let (err_count, warn_count) = (app.diag_error_count, app.diag_warn_count);
-    // Nerd Font glyphs (\u{f467}, \u{f071}) are double-width (2 terminal cells).
-    // Write icon and count in separate calls so the count isn't placed on top of
-    // the icon's right cell. Widths are computed explicitly rather than from chars().
+
     let err_count_str = format!("{} ", err_count);
     let warn_count_str = format!("{} ", warn_count);
-    // layout: " "(1) + icon(2) + count + " "(1) | icon(2) + count
-    let err_w = 3 + err_count_str.chars().count() as u16; // space + 2-cell icon + count
-    let warn_w = 2 + warn_count_str.chars().count() as u16; // 2-cell icon + count
+
+    let err_w = 3 + err_count_str.chars().count() as u16;
+    let warn_w = 2 + warn_count_str.chars().count() as u16;
     let diag_w = err_w + warn_w;
 
     let right_block_w = diag_w + status_w + pos_w;

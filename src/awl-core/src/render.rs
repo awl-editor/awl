@@ -73,12 +73,7 @@ pub fn draw(buf: &mut Buffer, app: &mut App, highlights: &[Option<highlight::Hig
         draw_open_url_dialog(buf, dlg, w, h);
     }
     if let Some(finder) = &app.finder {
-        let sem_tokens: &[lsp::SemanticToken] = finder
-            .preview_path
-            .as_ref()
-            .and_then(|p| app.semantic_tokens.get(p))
-            .map(|v| v.as_slice())
-            .unwrap_or(&[]);
+        let sem_tokens: &[lsp::SemanticToken] = finder.preview_path.as_ref().and_then(|p| app.semantic_tokens.get(p)).map(|v| v.as_slice()).unwrap_or(&[]);
         draw_finder(buf, finder, &app.root, w, h, sem_tokens);
     }
     if let Some(menu) = &mut app.breadcrumb_menu {
@@ -86,14 +81,17 @@ pub fn draw(buf: &mut Buffer, app: &mut App, highlights: &[Option<highlight::Hig
     }
 }
 
-pub fn set_terminal_title<W: Write>(out: &mut W, app: &App) -> io::Result<()> {
+pub fn terminal_title(app: &App) -> String {
     let project = app.root.file_name().and_then(|n| n.to_str()).unwrap_or("awl");
-    let title = if let Some(buf) = app.tabs.get(app.active_tab) {
+    if let Some(buf) = app.tabs.get(app.active_tab) {
         let rel = buf.path.strip_prefix(&app.root).unwrap_or(&buf.path).to_string_lossy();
-        format!("{} - {} L{}:{}", project, rel, buf.cursor_row + 1, buf.cursor_col + 1)
+        format!("{} - {}", project, rel)
     } else {
         project.to_string()
-    };
+    }
+}
+
+pub fn set_terminal_title<W: Write>(out: &mut W, title: &str) -> io::Result<()> {
     write!(out, "\x1b]0;{}\x07", title)
 }
 

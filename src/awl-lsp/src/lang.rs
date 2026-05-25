@@ -69,32 +69,8 @@ pub(crate) fn find_root(key: &str, path: &Path) -> PathBuf {
     };
     static FALLBACK: &[&str] = &[".git", ".hg"];
 
-    let start = path.parent().unwrap_or(path);
+    let start = if path.is_dir() { path } else { path.parent().unwrap_or(path) };
     let mut dir = start;
-
-    // For rust-analyzer, find the workspace root (highest Cargo.toml up to the git
-    // boundary). Start from `path` itself (not its parent) so that passing a directory
-    // works correctly. Cap at .git so we don't escape into ~/.cargo/registry.
-    if key == "rust-analyzer" {
-        let mut best: Option<PathBuf> = None;
-        let mut d = path;
-        loop {
-            if d.join("Cargo.toml").exists() {
-                best = Some(d.to_path_buf());
-            }
-            if FALLBACK.iter().any(|m| d.join(m).exists()) {
-                break;
-            }
-            match d.parent() {
-                Some(p) => d = p,
-                None => break,
-            }
-        }
-        if let Some(root) = best {
-            return root;
-        }
-        return path.to_path_buf();
-    }
 
     loop {
         if primary.iter().any(|m| dir.join(m).exists()) {

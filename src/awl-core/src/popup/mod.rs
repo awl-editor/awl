@@ -126,8 +126,6 @@ impl ContextMenu {
     }
 }
 
-// ── LSP context menu ──────────────────────────────────────────────────────────
-
 #[derive(Clone, Debug)]
 pub enum LspAction {
     ShowLogs(&'static str),
@@ -187,8 +185,6 @@ impl LspContextMenu {
     }
 }
 
-// ── Hover card ────────────────────────────────────────────────────────────────
-
 pub struct CardLine {
     pub text: String,
     pub bold: bool,
@@ -223,8 +219,6 @@ pub struct HoverCard {
     pub sel_cursor: Option<(usize, usize)>,
 }
 
-// ── Input prompt ─────────────────────────────────────────────────────────────
-
 #[derive(Clone, Copy, Debug)]
 pub enum PromptAction {
     NewFile,
@@ -257,8 +251,6 @@ impl InputPrompt {
         Self { title: "Rename Symbol", value: current.clone(), original: current, action: PromptAction::RenameSymbol, context: path, lsp_pos: Some((line, col)) }
     }
 }
-
-// ── Editor context menu ───────────────────────────────────────────────────────
 
 #[derive(Clone, Copy, Debug)]
 pub enum EditorMenuAction {
@@ -392,8 +384,6 @@ impl EditorContextMenu {
     }
 }
 
-// ── Tab context menu ──────────────────────────────────────────────────────────
-
 #[derive(Clone, Copy, Debug)]
 pub enum TabMenuAction {
     Close,
@@ -479,13 +469,9 @@ impl TabContextMenu {
     }
 }
 
-// ── Open-URL confirmation dialog ──────────────────────────────────────────────
-
 pub struct OpenUrlDialog {
     pub url: String,
 }
-
-// ── Confirm dialog ────────────────────────────────────────────────────────────
 
 pub struct ConfirmDialog {
     pub paths: Vec<PathBuf>,
@@ -496,8 +482,6 @@ impl ConfirmDialog {
         Self { paths }
     }
 }
-
-// ── Unsaved-changes dialog ─────────────────────────────────────────────────────
 
 pub enum UnsavedAction {
     CloseTab(usize),
@@ -518,21 +502,15 @@ impl UnsavedDialog {
     }
 }
 
-// ── Swap-file recovery dialog ──────────────────────────────────────────────────
-
 pub struct RecoveryDialog {
     pub path: PathBuf,
     pub swap_content: String,
 }
 
-// ── External-change dialog ─────────────────────────────────────────────────────
-
 pub struct ExternalChangeDialog {
     pub path: PathBuf,
     pub disk_content: String,
 }
-
-// ── Completion menu ───────────────────────────────────────────────────────────
 
 pub struct CompletionMenu {
     pub items: Vec<lsp::CompletionItem>,
@@ -604,8 +582,6 @@ impl CompletionMenu {
     }
 }
 
-// ── Breadcrumb symbol menu ────────────────────────────────────────────────────
-
 pub struct BreadcrumbSymbol {
     pub name: String,
     pub kind: u8,
@@ -671,8 +647,6 @@ impl BreadcrumbMenu {
         if idx < self.items.len() { Some(idx) } else { None }
     }
 }
-
-// ── Finder popup ──────────────────────────────────────────────────────────────
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub enum FinderMode {

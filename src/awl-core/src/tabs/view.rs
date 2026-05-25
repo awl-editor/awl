@@ -10,8 +10,8 @@ use crate::theme::*;
 
 pub const NAV_WIDTH: u16 = 7; // " ← " (3) + " → " (3) + "│" (1)
 
-/// Width (in terminal columns) that tab `i` occupies in the tab bar.
-/// Formula: space(1) + icon(1) + space(1) + name + modified_dot(0|2) + close(3) + separator(0|1).
+/// width (in terminal columns) that tab `i` occupies in the tab bar.
+/// formula: space(1) + icon(1) + space(1) + name + modified_dot(0|2) + close(3) + separator(0|1).
 pub fn tab_display_width(tab: &Buffer, i: usize, n_tabs: usize) -> usize {
     let name = tab_name(tab);
     let dot = if tab.modified { 2 } else { 0 };
@@ -19,7 +19,7 @@ pub fn tab_display_width(tab: &Buffer, i: usize, n_tabs: usize) -> usize {
     6 + name.len() + dot + sep
 }
 
-/// Adjust `app.tab_scroll` so the active tab is always within the visible region.
+/// adjust `app.tab_scroll` so the active tab is always within the visible region.
 pub fn ensure_active_tab_visible(app: &mut App, available: usize) {
     let n = app.tabs.len();
     if n == 0 {
@@ -31,7 +31,7 @@ pub fn ensure_active_tab_visible(app: &mut App, available: usize) {
         app.tab_scroll = active;
         return;
     }
-    // Advance tab_scroll right until active fits within the available width.
+    // advance tab_scroll right until active fits within the available width.
     while app.tab_scroll < active {
         let x: usize = (app.tab_scroll..=active).map(|i| tab_display_width(&app.tabs[i], i, n)).sum();
         if x <= available {
@@ -41,7 +41,8 @@ pub fn ensure_active_tab_visible(app: &mut App, available: usize) {
     }
 }
 
-/// Returns the tab index whose × close button is at screen position (x, y), or None.
+/// returns the tab index whose × close button is at screen position (x, y), or None.
+/// TODO: is this a good algorithm?
 pub fn tab_close_at(app: &App, layout: &Layout, x: u16, y: u16) -> Option<usize> {
     if y != layout.tab_bar.y || x < layout.tab_bar.x + NAV_WIDTH {
         return None;

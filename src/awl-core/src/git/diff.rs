@@ -9,7 +9,7 @@ pub enum DiffKind {
     Deleted,
 }
 
-/// Returns a 0-indexed line → DiffKind map for `file` vs HEAD.
+/// returns a 0-indexed line → DiffKind map for `file` vs HEAD.
 /// `Deleted` at line N means lines from HEAD were removed before line N in the
 /// current file (shown as a downward arrow between lines N-1 and N).
 pub fn line_diff(git_root: &Path, file: &Path) -> HashMap<usize, DiffKind> {

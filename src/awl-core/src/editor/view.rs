@@ -88,9 +88,6 @@ pub fn draw_editor(buf: &mut Buffer, app: &mut App, layout: &Layout, highlights:
     let text_x = layout.editor.x + gw;
     let text_cols = layout.editor.width.saturating_sub(gw) as usize;
     let rows = layout.editor.height as usize;
-
-    // Rebuild the match cache only when the view state changes.
-    // Split field borrows (app.tabs vs app.match_cache) let both live in the same block.
     {
         let tab_idx = app.active_tab;
         let (sel, scroll_row, lsp_version) = app.tabs.get(tab_idx).map(|a| (a.selection_range(), a.scroll_row, a.lsp_version)).unwrap_or((None, 0, 0));
@@ -120,33 +117,42 @@ pub fn draw_editor(buf: &mut Buffer, app: &mut App, layout: &Layout, highlights:
     let meta = |r: usize| -> (bool, usize) { if r >= vis_start && r < vis_start + visible_meta.len() { visible_meta[r - vis_start] } else { active.line_meta(r) } };
     let line_is_blank = |r: usize| -> bool { meta(r).0 };
 
-    // Visual leading-whitespace width (tabs expanded) — used for all guide logic.
+    // visual leading-whitespace width (tabs expanded) - used for all guide logic.
     let vis_lws = |r: usize| -> usize {
         let mut vcol = 0usize;
         for ch in active.line(r).chars() {
             match ch {
                 '\t' => vcol = (vcol / tab_size + 1) * tab_size,
-                ' '  => vcol += 1,
-                _    => break,
+                ' ' => vcol += 1,
+                _ => break,
             }
         }
         vcol
     };
 
-    // Detect the indent unit from visible non-blank lines via GCD of their
-    // visual leading widths.  Falls back to tab_size for tab-indented files or
+    // alg to detect the indent unit from visible non-blank lines via GCD of their
+    // visual leading widths. it falls back to tab_size for tab-indented files or
     // when no indented lines are visible.
     let guide_unit = {
-        fn gcd(a: usize, b: usize) -> usize { if b == 0 { a } else { gcd(b, a % b) } }
+        fn gcd(a: usize, b: usize) -> usize {
+            if b == 0 { a } else { gcd(b, a % b) }
+        }
         let scan_end_gu = (vis_start + rows).min(active.line_count());
         let mut uses_tabs = false;
         let mut g = 0usize;
         for r in vis_start..scan_end_gu {
-            if line_is_blank(r) { continue; }
+            if line_is_blank(r) {
+                continue;
+            }
             let char_lws = meta(r).1;
             let vlws = vis_lws(r);
-            if char_lws > 0 && vlws > char_lws { uses_tabs = true; break; }
-            if vlws > 0 { g = if g == 0 { vlws } else { gcd(g, vlws) }; }
+            if char_lws > 0 && vlws > char_lws {
+                uses_tabs = true;
+                break;
+            }
+            if vlws > 0 {
+                g = if g == 0 { vlws } else { gcd(g, vlws) };
+            }
         }
         if uses_tabs || g <= 1 { tab_size } else { g }
     };
@@ -217,8 +223,6 @@ pub fn draw_editor(buf: &mut Buffer, app: &mut App, layout: &Layout, highlights:
         (0, 0)
     };
 
-    // Cache is guaranteed fresh by the check at the top of this function.
-    // Split borrow: active holds &app.tabs, closure holds &app.match_cache.
     let in_match = |row: usize, col: usize| -> bool {
         app.match_cache.as_ref().and_then(|c| c.map.get(&row)).map_or(false, |v| {
             let idx = v.partition_point(|&(s, _)| s <= col);

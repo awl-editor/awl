@@ -3,14 +3,13 @@ use std::path::PathBuf;
 
 #[derive(Debug, Deserialize, Default)]
 pub struct Config {
-    /// Path to a theme TOML file. Tilde and env vars are not expanded by the
-    /// loader — use an absolute path or a path relative to the config dir.
+    /// note: tilde and env vars are not expanded by the
+    /// loader; use an absolute path or a path relative to the config dir.
     pub theme: Option<PathBuf>,
 }
 
 impl Config {
-    /// Load `~/.config/awl/config.toml` (or `$XDG_CONFIG_HOME/awl/config.toml`).
-    /// Missing file → silent default. Parse error → log to stderr, use default.
+    /// load `~/.config/awl/config.toml` (or `$XDG_CONFIG_HOME/awl/config.toml`).
     pub fn load() -> Self {
         let path = Self::path();
         let text = match std::fs::read_to_string(&path) {

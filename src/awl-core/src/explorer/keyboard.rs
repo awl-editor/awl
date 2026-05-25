@@ -1,8 +1,8 @@
 use termion::event::{Event, Key};
 use ui::layout::Layout;
 
-use crate::app::App;
 use super::tree;
+use crate::app::App;
 
 /// Handles keyboard navigation when the explorer panel is focused.
 /// Returns `(consumed, dirty)`. `consumed=false` means the event wasn't an explorer nav key.
@@ -11,15 +11,8 @@ pub fn handle(app: &mut App, event: &Event, layout: &Layout) -> (bool, bool) {
         return (false, false);
     }
 
-    let is_explorer_key = matches!(
-        event,
-        Event::Key(Key::Up)
-            | Event::Key(Key::Down)
-            | Event::Key(Key::ShiftUp)
-            | Event::Key(Key::ShiftDown)
-            | Event::Key(Key::Char('\n'))
-            | Event::Key(Key::Right)
-    );
+    let is_explorer_key =
+        matches!(event, Event::Key(Key::Up) | Event::Key(Key::Down) | Event::Key(Key::ShiftUp) | Event::Key(Key::ShiftDown) | Event::Key(Key::Char('\n')) | Event::Key(Key::Right));
     if !is_explorer_key {
         return (false, false);
     }
@@ -58,11 +51,7 @@ pub fn handle(app: &mut App, event: &Event, layout: &Layout) -> (bool, bool) {
                 }
                 app.explorer_selected -= 1;
                 let anchor = app.explorer_anchor.unwrap();
-                let (lo, hi) = if anchor <= app.explorer_selected {
-                    (anchor, app.explorer_selected)
-                } else {
-                    (app.explorer_selected, anchor)
-                };
+                let (lo, hi) = if anchor <= app.explorer_selected { (anchor, app.explorer_selected) } else { (app.explorer_selected, anchor) };
                 app.explorer_selection.clear();
                 for j in lo..=hi {
                     app.explorer_selection.insert(j);
@@ -79,11 +68,7 @@ pub fn handle(app: &mut App, event: &Event, layout: &Layout) -> (bool, bool) {
                 }
                 app.explorer_selected += 1;
                 let anchor = app.explorer_anchor.unwrap();
-                let (lo, hi) = if anchor <= app.explorer_selected {
-                    (anchor, app.explorer_selected)
-                } else {
-                    (app.explorer_selected, anchor)
-                };
+                let (lo, hi) = if anchor <= app.explorer_selected { (anchor, app.explorer_selected) } else { (app.explorer_selected, anchor) };
                 app.explorer_selection.clear();
                 for j in lo..=hi {
                     app.explorer_selection.insert(j);

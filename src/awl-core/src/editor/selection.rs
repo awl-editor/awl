@@ -17,7 +17,7 @@ pub fn sel_contains(sel: Option<((usize, usize), (usize, usize))>, row: usize, c
     true
 }
 
-/// Visual column of `char_idx` in `chars`, expanding tabs to `tab_size`-wide stops.
+/// visual column of `char_idx` in `chars`, expanding tabs to `tab_size`-wide stops.
 pub fn visual_col_of(chars: &[char], char_idx: usize, tab_size: usize) -> usize {
     let mut vcol = 0usize;
     for (i, &ch) in chars.iter().enumerate() {
@@ -33,8 +33,8 @@ pub fn visual_col_of(chars: &[char], char_idx: usize, tab_size: usize) -> usize 
     vcol
 }
 
-/// Char index in `chars` corresponding to visual column `target`, expanding tabs.
-/// If `target` falls inside a tab, returns the tab's char index.
+/// char-index in `chars` corresponding to visual col `target`, expanding tabs.
+/// if `target` falls inside a tab, returns the tab's char index.
 pub fn char_at_visual(chars: &[char], target: usize, tab_size: usize) -> usize {
     let mut vcol = 0usize;
     for (i, &ch) in chars.iter().enumerate() {

@@ -51,8 +51,8 @@ fn get_root_path() -> PathBuf {
 fn load_user_theme() {
     let cfg = config::Config::load();
     let loaded_theme = match cfg.theme {
-        Some(ref p) => theme::load_from(p),
-        None => theme::load_default(),
+        Some(ref p) if p.as_os_str() != "default" => theme::load_from(p),
+        _ => theme::load_default(),
     };
     theme::init(loaded_theme);
 }
@@ -85,7 +85,7 @@ fn main() -> io::Result<()> {
     render::draw(renderer.buffer_mut(), &mut app, &tab_highlights, w, h);
     renderer.flush(&mut out)?;
     sync_cursor(&mut out, &app, w, h)?;
-    render::set_terminal_title(&mut out, &app)?;
+    render::set_terminal_title(&mut out, &render::terminal_title(&app)[..])?;
     out.flush()?;
 
     let (app_tx, app_rx) = mpsc::channel::<AppEvent>();

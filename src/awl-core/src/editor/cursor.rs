@@ -15,7 +15,7 @@ pub enum PointerShape {
 pub fn pointer_shape_for(app: &App, mx: u16, my: u16, w: u16, h: u16) -> PointerShape {
     let over = |px: u16, py: u16, pw: u16, ph: u16| mx >= px && mx < px.saturating_add(pw) && my >= py && my < py.saturating_add(ph);
 
-    // Context menus: Pointer only on a real clickable item row; Default on borders/separators.
+    // context menus: pointer only on a real clickable item row; default on borders/separators.
     if let Some(m) = &app.context_menu {
         if m.hit(mx, my).is_some() {
             return PointerShape::Pointer;
@@ -49,7 +49,7 @@ pub fn pointer_shape_for(app: &App, mx: u16, my: u16, w: u16, h: u16) -> Pointer
         }
     }
 
-    // Finder overrides all zone logic while it is open.
+    // finder overrides all zone logic while it is open.
     if app.finder.is_some() {
         use crate::popup::finder::{INPUT_ROW_OFFSET, finder_geometry};
         let (pw, ph, px, py, _, _) = finder_geometry(w, h);
@@ -60,14 +60,14 @@ pub fn pointer_shape_for(app: &App, mx: u16, my: u16, w: u16, h: u16) -> Pointer
         return PointerShape::Default;
     }
 
-    // Hover card → Default (informational overlay, not interactive text).
+    // hover card → default (informational overlay, not interactive text).
     if let Some(card) = &app.hover_card {
         if card.cw > 0 && over(card.cx, card.cy, card.cw, card.ch) {
             return PointerShape::Default;
         }
     }
 
-    // Modal dialogs capture all input — nothing underneath is interactive.
+    // modal dialogs capture all input, nothing underneath is interactive.
     if app.confirm_dialog.is_some()
         || app.unsaved_dialog.is_some()
         || app.recovery_dialog.is_some()
@@ -80,12 +80,12 @@ pub fn pointer_shape_for(app: &App, mx: u16, my: u16, w: u16, h: u16) -> Pointer
 
     let layout = Layout::compute_mode(w, h, app.explorer_width, app.minimal_mode);
 
-    // Divider: ColResize anywhere along the divider column.
+    // divider: ColResize anywhere along the divider column.
     if !app.minimal_mode && layout.divider.width > 0 && mx == layout.divider.x && my < layout.divider.y + layout.divider.height {
         return PointerShape::ColResize;
     }
 
-    // Explorer: Pointer on the root row and on valid entry rows, Default elsewhere in the column.
+    // explorer: Pointer on the root row and on valid entry rows, Default elsewhere in the column.
     if mx < layout.explorer.x + layout.explorer.width && layout.explorer.width > 0 {
         let root_y = layout.explorer.y;
         if my == root_y {

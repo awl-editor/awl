@@ -124,11 +124,8 @@ pub struct ExplorerTheme {
     pub folder: Color,
 }
 
-// ── Global singleton ──────────────────────────────────────────────────────────
-
 static THEME: OnceLock<Theme> = OnceLock::new();
 
-/// Call once at startup before any drawing occurs.
 pub fn init(theme: Theme) {
     if THEME.set(theme).is_err() {
         panic!("theme::init called more than once");
@@ -140,9 +137,6 @@ fn get() -> &'static Theme {
     THEME.get().expect("theme not initialised; call theme::init() at startup")
 }
 
-// ── Free-function accessors (drop-in replacements for the old UPPER_CASE consts)
-
-// Editor
 pub fn bg_main() -> Color {
     get().editor.bg_main
 }
@@ -180,7 +174,6 @@ pub fn guide_active() -> Color {
     get().editor.guide_active
 }
 
-// Scrollbar
 pub fn sb_track() -> Color {
     get().scrollbar.track
 }
@@ -188,7 +181,6 @@ pub fn sb_thumb() -> Color {
     get().scrollbar.thumb
 }
 
-// Status bar
 pub fn sb_branch_bg() -> Color {
     get().statusbar.branch_bg
 }
@@ -208,7 +200,6 @@ pub fn powerline() -> &'static str {
     &get().statusbar.powerline
 }
 
-// Popups
 pub fn popup_bg() -> Color {
     get().popup.bg
 }
@@ -225,7 +216,6 @@ pub fn popup_link() -> Color {
     get().popup.link
 }
 
-// Syntax
 pub fn syntax_keyword() -> Color {
     get().syntax.keyword
 }
@@ -260,7 +250,6 @@ pub fn syntax_default() -> Color {
     get().syntax.default
 }
 
-// Git
 pub fn git_added() -> Color {
     get().git.added
 }
@@ -283,7 +272,6 @@ pub fn git_ignored() -> Color {
     get().git.ignored
 }
 
-// Diagnostics
 pub fn diag_error() -> Color {
     get().diagnostics.error
 }
@@ -300,7 +288,6 @@ pub fn diag_warning_bg() -> Color {
     get().diagnostics.warning_bg
 }
 
-// Finder
 pub fn finder_accent() -> Color {
     get().finder.accent
 }
@@ -353,7 +340,6 @@ pub fn finder_file_sel_dim() -> Color {
     get().finder.file_sel_dim
 }
 
-// Breadcrumb symbol kinds
 pub fn breadcrumb_type() -> Color {
     get().breadcrumb.type_color
 }
@@ -370,7 +356,6 @@ pub fn breadcrumb_constant() -> Color {
     get().breadcrumb.constant_color
 }
 
-// Tabs
 pub fn tab_modified_dot() -> Color {
     get().tabs.modified_dot
 }
@@ -378,7 +363,6 @@ pub fn tab_active_fg() -> Color {
     get().tabs.active_fg
 }
 
-// Explorer
 pub fn explorer_folder() -> Color {
     get().explorer.folder
 }

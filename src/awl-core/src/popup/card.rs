@@ -51,7 +51,6 @@ pub fn draw_hover_card(buf: &mut Buffer, card: &mut HoverCard, w: u16, h: u16) {
     let cy = if card.y >= card_h { card.y - card_h } else { card.y + 1 };
     let cy = cy.min(h.saturating_sub(card_h));
 
-    // Store bounds for hit-testing.
     card.cx = cx;
     card.cy = cy;
     card.cw = card_w;
@@ -60,7 +59,6 @@ pub fn draw_hover_card(buf: &mut Buffer, card: &mut HoverCard, w: u16, h: u16) {
 
     buf.fill(Rect { x: cx, y: cy, width: card_w, height: card_h }, Cell::new(' ', fg(), popup_bg()));
 
-    // Top border — ▲ indicator if scrolled down.
     buf.set(cx, cy, Cell::new('▛', popup_border(), popup_bg()));
     if has_more_above {
         let mid = cx + card_w / 2;
@@ -99,13 +97,12 @@ pub fn draw_hover_card(buf: &mut Buffer, card: &mut HoverCard, w: u16, h: u16) {
             );
         }
 
-        // Register link hit zones for this rendered row.
+        // push hitbox bounds from bounding box.
         for &(s, e, ref url) in &card_line.links {
             card.link_zones.push((cx + 2 + s as u16, cx + 2 + e as u16, ly, url.clone()));
         }
     }
 
-    // Bottom border — ▼ indicator if more content below.
     let by = cy + card_h - 1;
     buf.set(cx, by, Cell::new('▙', popup_border(), popup_bg()));
     if has_more_below {

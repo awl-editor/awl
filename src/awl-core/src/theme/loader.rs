@@ -3,104 +3,101 @@ use serde::Deserialize;
 use std::path::Path;
 use ui::cell::Color;
 
-// ── Embedded default theme ────────────────────────────────────────────────────
-// The raw TOML for the built-in dark theme.
-// Every key listed here maps 1-to-1 to a field in the serde DTOs below.
 pub const DEFAULT_THEME_TOML: &str = r##"
 [editor]
-bg_main      = "#0c0c0d"
-bg_dark      = "#141415"
-bg_tab       = "#1a1a1c"
-bg_cursor    = "#1e1c18"
-bg_sel       = "#2a2722"
-bg_select    = "#322e28"
-bg_match     = "#222224"
-fg           = "#c3b6a0"
-fg_dim       = "#5e5d57"
-divider      = "#222224"
-guide        = "#1a1a1c"
-guide_active = "#2a2722"
+bg_main      = "#151512"
+bg_dark      = "#1b1b18"
+bg_tab       = "#232320"
+bg_cursor    = "#28261f"
+bg_sel       = "#332f26"
+bg_select    = "#3e3a2e"
+bg_match     = "#28261f"
+fg           = "#d6c9b0"
+fg_dim       = "#807b6e"
+divider      = "#24241f"
+guide        = "#202019"
+guide_active = "#332f26"
 
 [scrollbar]
-track = "#0c0c0d"
-thumb = "#2a2722"
+track = "#151512"
+thumb = "#332f26"
 
 [statusbar]
-branch_bg = "#5e5d57"
-lsp_bg    = "#3a3530"
-file_bg   = "#141415"
-fg        = "#cbb892"
-fg_dim    = "#8a9aa0"
+branch_bg = "#807b6e"
+lsp_bg    = "#473f37"
+file_bg   = "#1b1b18"
+fg        = "#e6cf9a"
+fg_dim    = "#a8b6bc"
 powerline = ""
 
 [popup]
-bg       = "#141415"
-border   = "#222224"
-hover    = "#2a2722"
-hover_fg = "#cbb892"
-link     = "#cbb892"
+bg       = "#1b1b18"
+border   = "#24241f"
+hover    = "#332f26"
+hover_fg = "#e6cf9a"
+link     = "#e6cf9a"
 
 [syntax]
-keyword  = "#b07d56"
-string   = "#cbb892"
-comment  = "#5e5d57"
-number   = "#c89a6a"
-function = "#a8b29a"
-type_    = "#8a9aa0"
-constant = "#9c8aa6"
-variable = "#c3b6a0"
-property = "#c3b6a0"
-operator = "#9a988f"
-default  = "#c3b6a0"
+keyword  = "#e0925c"
+string   = "#e6cf9a"
+comment  = "#807b6e"
+number   = "#e6b074"
+function = "#b8c89e"
+type_    = "#86b0bc"
+constant = "#b89ec8"
+variable = "#d6c9b0"
+property = "#d6c9b0"
+operator = "#a8a69a"
+default  = "#d6c9b0"
 
 [git]
-added     = "#a8b29a"
-modified  = "#c89a6a"
-deleted   = "#b56b6b"
-renamed   = "#c89a6a"
-untracked = "#a8b29a"
-conflict  = "#b56b6b"
-ignored   = "#5e5d57"
+added     = "#9ec88a"
+modified  = "#e6b074"
+deleted   = "#d07a7a"
+renamed   = "#e6b074"
+untracked = "#9ec88a"
+conflict  = "#d07a7a"
+ignored   = "#807b6e"
 
 [diagnostics]
-error      = "#b56b6b"
-warning    = "#c89a6a"
-info       = "#8a9aa0"
-error_bg   = "#2a1818"
-warning_bg = "#2a2010"
+error      = "#d07a7a"
+warning    = "#e6b074"
+info       = "#86b0bc"
+error_bg   = "#382020"
+warning_bg = "#382b18"
 
 [finder]
-accent         = "#cbb892"
-sel_bg         = "#2a2722"
-match_bg       = "#3a3228"
-match_fg       = "#cbb892"
-row_alt_bg     = "#0e0e0f"
-title_fg       = "#8a9aa0"
-input_sel_bg   = "#32302a"
-title_query_fg = "#cbb892"
-error_fg       = "#b56b6b"
-text_dim       = "#5e5d57"
-file_dim       = "#8a9aa0"
-lnum_sel       = "#b07d56"
-sep_sel        = "#3a3228"
-sep_dim        = "#222224"
-text_sel       = "#c3b6a0"
-file_sel       = "#cbb892"
-file_sel_dim   = "#7a7060"
+accent         = "#e6cf9a"
+sel_bg         = "#332f26"
+match_bg       = "#453e2e"
+match_fg       = "#e6cf9a"
+row_alt_bg     = "#191915"
+title_fg       = "#a8b6bc"
+input_sel_bg   = "#403a30"
+title_query_fg = "#e6cf9a"
+error_fg       = "#d07a7a"
+text_dim       = "#807b6e"
+file_dim       = "#a8b6bc"
+lnum_sel       = "#e0925c"
+sep_sel        = "#453e2e"
+sep_dim        = "#24241f"
+text_sel       = "#d6c9b0"
+file_sel       = "#e6cf9a"
+file_sel_dim   = "#9a8e7a"
 
 [breadcrumb]
-type_color     = "#8a9aa0"
-function_color = "#a8b29a"
-field_color    = "#c3b6a0"
-variable_color = "#c3b6a0"
-constant_color = "#9c8aa6"
+type_color     = "#86b0bc"
+function_color = "#b8c89e"
+field_color    = "#d6c9b0"
+variable_color = "#d6c9b0"
+constant_color = "#b89ec8"
 
 [tabs]
-modified_dot = "#cbb892"
-active_fg    = "#cbb892"
+modified_dot = "#e6cf9a"
+active_fg    = "#a8a69a"
 
 [explorer]
-folder = "#9a988f"
+folder = "#a8a69a"
 "##;
 
 fn parse_hex(s: &str) -> Result<Color, String> {
@@ -257,15 +254,11 @@ pub struct ExplorerFile {
     pub folder: Option<String>,
 }
 
-/// load the default built-in theme
 pub fn load_default() -> Theme {
     let file: ThemeFile = toml::from_str(DEFAULT_THEME_TOML).expect("embedded default theme is malformed");
     Theme::try_from(file).expect("embedded default theme has invalid colors")
 }
 
-/// Load a theme from `path`, falling back to the default for any missing keys.
-/// Errors during file I/O or parsing are printed to stderr and the default is
-/// used in their place.
 pub fn load_from(path: &Path) -> Theme {
     let default_file: ThemeFile = toml::from_str(DEFAULT_THEME_TOML).expect("embedded default theme is malformed");
     let mut default_val: toml::Value = toml::from_str(DEFAULT_THEME_TOML).expect("embedded default theme is malformed");

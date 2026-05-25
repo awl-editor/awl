@@ -90,6 +90,14 @@ pub fn run(source: &str, path: &Path) -> Option<Highlights> {
     run_for_lang(source, lang)
 }
 
+/// Returns true if the highlight span covering (row, col) is a comment.
+pub fn cursor_in_comment(highlights: &Highlights, row: usize, col: usize) -> bool {
+    // use syntax highlighting from tree-sitter to determine if we are in a comment instead of
+    // hard coding comment types, i.e //, #, etc.
+    let comment_color = crate::theme::syntax_comment();
+    highlights.get(row).map(|spans| spans.iter().any(|&(start, end, color)| col >= start && col < end && color == comment_color)).unwrap_or(false)
+}
+
 pub fn run_for_lang(source: &str, lang: &str) -> Option<Highlights> {
     let lang_static: &'static str = match lang {
         "rust" => "rust",

@@ -14,69 +14,9 @@ pub(crate) fn write_lsp(stdin: &mut ChildStdin, msg: &str) -> bool {
     stdin.write_all(header.as_bytes()).is_ok() && stdin.write_all(msg.as_bytes()).is_ok()
 }
 
-pub(crate) fn initialize_msg(id: i64, root: &Path, server_key: &str) -> Value {
+pub(crate) fn initialize_msg(id: i64, root: &Path, _server_key: &str) -> Value {
     let uri = path_uri(root).unwrap_or_default();
     let name = root.file_name().unwrap_or_default().to_string_lossy().to_string();
-
-    let mut text_document = json!({
-        "synchronization": {
-            "dynamicRegistration": false,
-            "willSave": false,
-            "didSave": true,
-            "willSaveWaitUntil": false
-        },
-        "publishDiagnostics": {
-            "relatedInformation": false
-        },
-        "hover": {
-            "contentFormat": ["markdown", "plaintext"]
-        },
-        "completion": {
-            "completionItem": {
-                "snippetSupport": false,
-                "commitCharactersSupport": false,
-                "documentationFormat": ["plaintext"],
-                "insertReplaceSupport": false
-            },
-            "contextSupport": false
-        },
-        "semanticTokens": {
-            "requests": { "full": true },
-            "tokenTypes": [
-                "namespace","type","class","enum","interface","struct",
-                "typeParameter","parameter","variable","property","enumMember",
-                "event","function","method","macro","keyword","modifier",
-                "comment","string","number","regexp","operator","decorator"
-            ],
-            "tokenModifiers": [
-                "declaration","definition","readonly","static","deprecated",
-                "abstract","async","modification","documentation","defaultLibrary"
-            ],
-            "formats": ["relative"],
-            "overlappingTokenSupport": false,
-            "multilineTokenSupport": false
-        },
-        "codeAction": {
-            "codeActionLiteralSupport": {
-                "codeActionKind": {
-                    "valueSet": [
-                        "",
-                        "quickfix",
-                        "refactor",
-                        "refactor.extract",
-                        "refactor.inline",
-                        "refactor.rewrite",
-                        "source",
-                        "source.organizeImports"
-                    ]
-                }
-            }
-        }
-    });
-
-    if server_key == "clangd" {
-        text_document["inactiveRegionsCapabilities"] = json!({ "inactiveRegions": true });
-    }
 
     json!({
         "jsonrpc": "2.0",
@@ -86,7 +26,62 @@ pub(crate) fn initialize_msg(id: i64, root: &Path, server_key: &str) -> Value {
             "processId": std::process::id(),
             "rootUri": uri,
             "capabilities": {
-                "textDocument": text_document
+                "textDocument": {
+                    "synchronization": {
+                        "dynamicRegistration": false,
+                        "willSave": false,
+                        "didSave": true,
+                        "willSaveWaitUntil": false
+                    },
+                    "publishDiagnostics": {
+                        "relatedInformation": false
+                    },
+                    "hover": {
+                        "contentFormat": ["markdown", "plaintext"]
+                    },
+                    "completion": {
+                        "completionItem": {
+                            "snippetSupport": false,
+                            "commitCharactersSupport": false,
+                            "documentationFormat": ["plaintext"],
+                            "insertReplaceSupport": false
+                        },
+                        "contextSupport": false
+                    },
+                    "semanticTokens": {
+                        "requests": { "full": true },
+                        "tokenTypes": [
+                            "namespace","type","class","enum","interface","struct",
+                            "typeParameter","parameter","variable","property","enumMember",
+                            "event","function","method","macro","keyword","modifier",
+                            "comment","string","number","regexp","operator","decorator"
+                        ],
+                        "tokenModifiers": [
+                            "declaration","definition","readonly","static","deprecated",
+                            "abstract","async","modification","documentation","defaultLibrary"
+                        ],
+                        "formats": ["relative"],
+                        "overlappingTokenSupport": false,
+                        "multilineTokenSupport": false
+                    },
+                    "codeAction": {
+                        "codeActionLiteralSupport": {
+                            "codeActionKind": {
+                                "valueSet": [
+                                    "",
+                                    "quickfix",
+                                    "refactor",
+                                    "refactor.extract",
+                                    "refactor.inline",
+                                    "refactor.rewrite",
+                                    "source",
+                                    "source.organizeImports"
+                                ]
+                            }
+                        }
+                    },
+                    "inactiveRegionsCapabilities": true
+                }
             },
             "workspaceFolders": [{ "uri": uri, "name": name }]
         }

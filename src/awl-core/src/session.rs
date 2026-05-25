@@ -48,7 +48,7 @@ fn session_path(root: &Path) -> PathBuf {
 }
 
 pub fn save(app: &App) {
-    // Only persist real files — skip virtual tabs like [diagnostics] and [status-log].
+    // persist real files and skip virtual tabs like [diagnostics] and [status-log].
     let tabs: Vec<TabState> = app
         .tabs
         .iter()
@@ -56,7 +56,7 @@ pub fn save(app: &App) {
         .map(|t| TabState { path: t.path.display().to_string(), scroll_row: t.scroll_row, scroll_col: t.scroll_col, cursor_row: t.cursor_row, cursor_col: t.cursor_col })
         .collect();
 
-    // Map the current active_tab index into the filtered list.
+    // map the current active_tab index into the filtered list.
     let active_path = app.tabs.get(app.active_tab).filter(|t| !t.virtual_tab).map(|t| t.path.display().to_string());
     let active_tab = active_path.and_then(|p| tabs.iter().position(|t| t.path == p)).unwrap_or(0);
 
@@ -101,7 +101,7 @@ pub fn restore(app: &mut App, session: Session) {
         }
     }
 
-    // Don't restore scroll — start at the top so hidden/dot directories are visible.
+    // don't restore scroll; start at the top so hidden/dot directories are visible.
     app.explorer_scroll = 0;
     let mut tab_map: Vec<usize> = Vec::new();
 

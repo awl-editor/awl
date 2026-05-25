@@ -18,9 +18,6 @@ impl LspManager {
         let Some(lang) = lang_id(path) else { return };
         let Some(key) = server_key(lang) else { return };
         if !self.clients.contains_key(key) {
-            // Use the project root (cwd where awl was launched) as the hint for
-            // find_root, not the file path. This avoids starting rust-analyzer
-            // rooted at ~/.cargo/registry when a dependency file is open.
             let root = find_root(key, &self.project_root);
             if let Some(client) = LspClient::start(key, &root) {
                 self.clients.insert(key, client);
@@ -179,4 +176,3 @@ impl LspManager {
         }
     }
 }
-
