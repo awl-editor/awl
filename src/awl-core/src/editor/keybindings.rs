@@ -512,6 +512,10 @@ pub fn handle(
             }
         }
 
+        Event::Key(Key::F(3)) => {
+            app.dump_screen = true;
+        }
+
         Event::Key(Key::F(12)) => {
             let info = app.current()
                 .filter(|b| !b.virtual_tab)

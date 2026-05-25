@@ -107,6 +107,7 @@ pub struct App {
     pub match_cache: Option<MatchCache>,
     pub tab_scroll: usize,
     pub hovered_close: Option<usize>,
+    pub dump_screen: bool,
 }
 
 impl App {
@@ -195,6 +196,7 @@ impl App {
             match_cache: None,
             tab_scroll: 0,
             hovered_close: None,
+            dump_screen: false,
         }
     }
 

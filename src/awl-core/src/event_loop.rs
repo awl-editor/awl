@@ -382,6 +382,19 @@ pub fn run<W: Write>(
             if !is_motion {
                 update_highlights(app, tab_highlights);
             }
+            if app.dump_screen {
+                app.dump_screen = false;
+                let ts = std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .unwrap_or_default()
+                    .as_secs();
+                let path = std::path::PathBuf::from(format!("/tmp/awl-{ts}.ansi"));
+                match renderer.dump_previous(&path) {
+                    Ok(()) => app.set_status(format!("dumped → {}", path.display()), 3000, StatusLevel::Log),
+                    Err(e) => app.set_status(format!("dump failed: {e}"), 3000, StatusLevel::Error),
+                }
+            }
+
             render::draw(renderer.buffer_mut(), app, tab_highlights, w, h);
             renderer.flush(out)?;
             sync_cursor(out, app, w, h)?;

@@ -1,4 +1,5 @@
 use std::io::{self, Write};
+use std::path::Path;
 
 use crate::buffer::Buffer;
 use crate::cell::{Color, UnderlineStyle};
@@ -16,6 +17,47 @@ impl Renderer {
 
     pub fn buffer_mut(&mut self) -> &mut Buffer {
         &mut self.current
+    }
+
+    /// Write the last flushed frame to `path` as ANSI-escaped text.
+    /// Each row is terminated with a newline so the file is `cat`-able.
+    pub fn dump_previous(&self, path: &Path) -> io::Result<()> {
+        let buf = &self.previous;
+        let mut out = std::fs::File::create(path)?;
+
+        for y in 0..buf.height {
+            write!(out, "\x1b[0m")?;
+            let mut last_fg: Option<Color> = None;
+            let mut last_bg: Option<Color> = None;
+            let mut last_bold = false;
+
+            for x in 0..buf.width {
+                let cell = buf.get(x, y);
+
+                if last_fg != Some(cell.fg) {
+                    let Color { r, g, b } = cell.fg;
+                    write!(out, "\x1b[38;2;{r};{g};{b}m")?;
+                    last_fg = Some(cell.fg);
+                }
+                if last_bg != Some(cell.bg) {
+                    let Color { r, g, b } = cell.bg;
+                    write!(out, "\x1b[48;2;{r};{g};{b}m")?;
+                    last_bg = Some(cell.bg);
+                }
+                if cell.bold && !last_bold {
+                    write!(out, "\x1b[1m")?;
+                    last_bold = true;
+                }
+
+                let ch = if cell.ch.is_control() { ' ' } else { cell.ch };
+                write!(out, "{ch}")?;
+            }
+
+            writeln!(out)?;
+        }
+
+        write!(out, "\x1b[0m")?;
+        out.flush()
     }
 
     pub fn resize(&mut self, width: u16, height: u16) {
