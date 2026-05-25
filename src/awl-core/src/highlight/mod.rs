@@ -79,6 +79,7 @@ pub fn language_for_path(path: &Path) -> Option<&'static str> {
         "zig" => Some("zig"),
         "cmake" => Some("cmake"),
         "ini" | "cfg" | "conf" => Some("ini"),
+        "yaml" | "yml" => Some("yaml"),
         "md" | "markdown" => Some("markdown"),
         _ => None,
     }
@@ -104,6 +105,7 @@ pub fn run_for_lang(source: &str, lang: &str) -> Option<Highlights> {
         "ini" => "ini",
         "markdown" => "markdown",
         "bash" => "bash",
+        "yaml" => "yaml",
         _ => return None,
     };
     grammars::run_cached(source, lang_static)

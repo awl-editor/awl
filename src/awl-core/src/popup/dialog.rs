@@ -12,37 +12,37 @@ pub fn draw_prompt(buf: &mut Buffer, prompt: &InputPrompt, w: u16, h: u16) {
 
     buf.fill(Rect { x: px, y: py, width: PW, height: PH }, Cell::new(' ', fg(), popup_bg()));
 
-    buf.set(px, py, Cell::new('┌', popup_border(), popup_bg()));
+    buf.set(px, py, Cell::new('▛', popup_border(), popup_bg()));
     for i in 1..PW - 1 {
-        buf.set(px + i, py, Cell::new('─', popup_border(), popup_bg()));
+        buf.set(px + i, py, Cell::new('▀', popup_border(), popup_bg()));
     }
-    buf.set(px + PW - 1, py, Cell::new('┐', popup_border(), popup_bg()));
+    buf.set(px + PW - 1, py, Cell::new('▜', popup_border(), popup_bg()));
 
-    buf.set(px, py + 1, Cell::new('│', popup_border(), popup_bg()));
+    buf.set(px, py + 1, Cell::new('▌', popup_border(), popup_bg()));
     buf.write_str(px + 2, py + 1, prompt.title, fg(), popup_bg());
-    buf.set(px + PW - 1, py + 1, Cell::new('│', popup_border(), popup_bg()));
+    buf.set(px + PW - 1, py + 1, Cell::new('▐', popup_border(), popup_bg()));
 
-    buf.set(px, py + 2, Cell::new('├', popup_border(), popup_bg()));
+    buf.set(px, py + 2, Cell::new('▌', popup_border(), popup_bg()));
     for i in 1..PW - 1 {
-        buf.set(px + i, py + 2, Cell::new('─', popup_border(), popup_bg()));
+        buf.set(px + i, py + 2, Cell::new('▀', popup_border(), popup_bg()));
     }
-    buf.set(px + PW - 1, py + 2, Cell::new('┤', popup_border(), popup_bg()));
+    buf.set(px + PW - 1, py + 2, Cell::new('▐', popup_border(), popup_bg()));
 
-    buf.set(px, py + 3, Cell::new('│', popup_border(), popup_bg()));
+    buf.set(px, py + 3, Cell::new('▌', popup_border(), popup_bg()));
     buf.write_str(px + 2, py + 3, "> ", fg_dim(), popup_bg());
     let input_w = (PW - 6) as usize;
     let chars: Vec<char> = prompt.value.chars().collect();
     let skip = chars.len().saturating_sub(input_w);
     let visible: String = chars[skip..].iter().collect();
     buf.write_str(px + 4, py + 3, &visible, fg(), popup_bg());
-    buf.set(px + PW - 1, py + 3, Cell::new('│', popup_border(), popup_bg()));
+    buf.set(px + PW - 1, py + 3, Cell::new('▐', popup_border(), popup_bg()));
 
     let by = py + PH - 1;
-    buf.set(px, by, Cell::new('└', popup_border(), popup_bg()));
+    buf.set(px, by, Cell::new('▙', popup_border(), popup_bg()));
     for i in 1..PW - 1 {
-        buf.set(px + i, by, Cell::new('─', popup_border(), popup_bg()));
+        buf.set(px + i, by, Cell::new('▄', popup_border(), popup_bg()));
     }
-    buf.set(px + PW - 1, by, Cell::new('┘', popup_border(), popup_bg()));
+    buf.set(px + PW - 1, by, Cell::new('▟', popup_border(), popup_bg()));
 }
 
 pub fn draw_confirm_dialog(buf: &mut Buffer, dlg: &ConfirmDialog, root: &std::path::Path, w: u16, h: u16) {
@@ -82,29 +82,28 @@ pub fn draw_confirm_dialog(buf: &mut Buffer, dlg: &ConfirmDialog, root: &std::pa
         buf.set(px + pw - 1, y, Cell::new(right, popup_border(), popup_bg()));
     };
     let side = |buf: &mut Buffer, y: u16| {
-        buf.set(px, y, Cell::new('│', popup_border(), popup_bg()));
-        buf.set(px + pw - 1, y, Cell::new('│', popup_border(), popup_bg()));
+        buf.set(px, y, Cell::new('▌', popup_border(), popup_bg()));
+        buf.set(px + pw - 1, y, Cell::new('▐', popup_border(), popup_bg()));
     };
 
     buf.fill(Rect { x: px, y: py, width: pw, height: ph }, Cell::new(' ', fg(), popup_bg()));
 
     let mut row = py;
-    hline(buf, row, '┌', '─', '┐');
+    hline(buf, row, '▛', '▀', '▜');
     row += 1;
 
     side(buf, row);
     buf.write_str(px + 2, row, "Confirm Delete", fg(), popup_bg());
     row += 1;
 
-    hline(buf, row, '├', '─', '┤');
+    hline(buf, row, '▌', '─', '▐');
     row += 1;
 
     side(buf, row);
     row += 1;
 
     side(buf, row);
-    let warn_color = diag_error();
-    buf.write_str(px + 2, row, &count_line.trim_start(), warn_color, popup_bg());
+    buf.write_str(px + 2, row, &count_line.trim_start(), diag_error(), popup_bg());
     row += 1;
 
     for pl in &path_lines {
@@ -127,7 +126,7 @@ pub fn draw_confirm_dialog(buf: &mut Buffer, dlg: &ConfirmDialog, root: &std::pa
     buf.write_str(px + 2, row, footer.trim_start(), fg_dim(), popup_bg());
     row += 1;
 
-    hline(buf, row, '└', '─', '┘');
+    hline(buf, row, '▙', '▄', '▟');
 }
 
 pub fn draw_unsaved_dialog(buf: &mut Buffer, dlg: &UnsavedDialog, root: &std::path::Path, w: u16, h: u16) {
@@ -167,19 +166,19 @@ pub fn draw_unsaved_dialog(buf: &mut Buffer, dlg: &UnsavedDialog, root: &std::pa
         buf.set(px + pw - 1, y, Cell::new(right, popup_border(), popup_bg()));
     };
     let side = |buf: &mut Buffer, y: u16| {
-        buf.set(px, y, Cell::new('│', popup_border(), popup_bg()));
-        buf.set(px + pw - 1, y, Cell::new('│', popup_border(), popup_bg()));
+        buf.set(px, y, Cell::new('▌', popup_border(), popup_bg()));
+        buf.set(px + pw - 1, y, Cell::new('▐', popup_border(), popup_bg()));
     };
 
     buf.fill(Rect { x: px, y: py, width: pw, height: ph }, Cell::new(' ', fg(), popup_bg()));
 
     let mut row = py;
-    hline(buf, row, '┌', '─', '┐');
+    hline(buf, row, '▛', '▀', '▜');
     row += 1;
     side(buf, row);
     buf.write_str(px + 2, row, "Unsaved Changes", fg(), popup_bg());
     row += 1;
-    hline(buf, row, '├', '─', '┤');
+    hline(buf, row, '▌', '─', '▐');
     row += 1;
     side(buf, row);
     row += 1;
@@ -202,7 +201,7 @@ pub fn draw_unsaved_dialog(buf: &mut Buffer, dlg: &UnsavedDialog, root: &std::pa
     side(buf, row);
     buf.write_str(px + 2, row, footer.trim_start(), fg_dim(), popup_bg());
     row += 1;
-    hline(buf, row, '└', '─', '┘');
+    hline(buf, row, '▙', '▄', '▟');
 }
 
 pub fn draw_external_change_dialog(buf: &mut Buffer, dlg: &ExternalChangeDialog, root: &std::path::Path, w: u16, h: u16) {
@@ -224,19 +223,19 @@ pub fn draw_external_change_dialog(buf: &mut Buffer, dlg: &ExternalChangeDialog,
         buf.set(px + pw - 1, y, Cell::new(right, popup_border(), popup_bg()));
     };
     let side = |buf: &mut Buffer, y: u16| {
-        buf.set(px, y, Cell::new('│', popup_border(), popup_bg()));
-        buf.set(px + pw - 1, y, Cell::new('│', popup_border(), popup_bg()));
+        buf.set(px, y, Cell::new('▌', popup_border(), popup_bg()));
+        buf.set(px + pw - 1, y, Cell::new('▐', popup_border(), popup_bg()));
     };
 
     buf.fill(Rect { x: px, y: py, width: pw, height: ph }, Cell::new(' ', fg(), popup_bg()));
 
     let mut row = py;
-    hline(buf, row, '┌', '─', '┐');
+    hline(buf, row, '▛', '▀', '▜');
     row += 1;
     side(buf, row);
     buf.write_str(px + 2, row, "File Changed Externally", fg(), popup_bg());
     row += 1;
-    hline(buf, row, '├', '─', '┤');
+    hline(buf, row, '▌', '─', '▐');
     row += 1;
     side(buf, row);
     row += 1;
@@ -252,7 +251,7 @@ pub fn draw_external_change_dialog(buf: &mut Buffer, dlg: &ExternalChangeDialog,
     side(buf, row);
     buf.write_str(px + 2, row, footer.trim_start(), fg_dim(), popup_bg());
     row += 1;
-    hline(buf, row, '└', '─', '┘');
+    hline(buf, row, '▙', '▄', '▟');
 }
 
 pub fn draw_recovery_dialog(buf: &mut Buffer, dlg: &RecoveryDialog, root: &std::path::Path, w: u16, h: u16) {
@@ -274,19 +273,19 @@ pub fn draw_recovery_dialog(buf: &mut Buffer, dlg: &RecoveryDialog, root: &std::
         buf.set(px + pw - 1, y, Cell::new(right, popup_border(), popup_bg()));
     };
     let side = |buf: &mut Buffer, y: u16| {
-        buf.set(px, y, Cell::new('│', popup_border(), popup_bg()));
-        buf.set(px + pw - 1, y, Cell::new('│', popup_border(), popup_bg()));
+        buf.set(px, y, Cell::new('▌', popup_border(), popup_bg()));
+        buf.set(px + pw - 1, y, Cell::new('▐', popup_border(), popup_bg()));
     };
 
     buf.fill(Rect { x: px, y: py, width: pw, height: ph }, Cell::new(' ', fg(), popup_bg()));
 
     let mut row = py;
-    hline(buf, row, '┌', '─', '┐');
+    hline(buf, row, '▛', '▀', '▜');
     row += 1;
     side(buf, row);
     buf.write_str(px + 2, row, "Recover Unsaved Changes?", fg(), popup_bg());
     row += 1;
-    hline(buf, row, '├', '─', '┤');
+    hline(buf, row, '▌', '─', '▐');
     row += 1;
     side(buf, row);
     row += 1;
@@ -302,7 +301,7 @@ pub fn draw_recovery_dialog(buf: &mut Buffer, dlg: &RecoveryDialog, root: &std::
     side(buf, row);
     buf.write_str(px + 2, row, footer.trim_start(), fg_dim(), popup_bg());
     row += 1;
-    hline(buf, row, '└', '─', '┘');
+    hline(buf, row, '▙', '▄', '▟');
 }
 
 pub fn draw_open_url_dialog(buf: &mut Buffer, dlg: &OpenUrlDialog, w: u16, h: u16) {
@@ -326,18 +325,18 @@ pub fn draw_open_url_dialog(buf: &mut Buffer, dlg: &OpenUrlDialog, w: u16, h: u1
     };
     let side = |buf: &mut Buffer, y: u16| {
         buf.fill(Rect { x: px, y, width: pw, height: 1 }, Cell::new(' ', fg(), popup_bg()));
-        buf.set(px, y, Cell::new('│', popup_border(), popup_bg()));
-        buf.set(px + pw - 1, y, Cell::new('│', popup_border(), popup_bg()));
+        buf.set(px, y, Cell::new('▌', popup_border(), popup_bg()));
+        buf.set(px + pw - 1, y, Cell::new('▐', popup_border(), popup_bg()));
     };
 
     buf.fill(Rect { x: px, y: py, width: pw, height: ph }, Cell::new(' ', fg(), popup_bg()));
     let mut row = py;
-    hline(buf, row, '┌', '─', '┐');
+    hline(buf, row, '▛', '▀', '▜');
     row += 1;
     side(buf, row);
     buf.write_str(px + 2, row, title, fg(), popup_bg());
     row += 1;
-    hline(buf, row, '├', '─', '┤');
+    hline(buf, row, '▌', '─', '▐');
     row += 1;
     side(buf, row);
     row += 1;
@@ -348,5 +347,5 @@ pub fn draw_open_url_dialog(buf: &mut Buffer, dlg: &OpenUrlDialog, w: u16, h: u1
     side(buf, row);
     buf.write_str(px + 2, row, footer.trim_start(), fg_dim(), popup_bg());
     row += 1;
-    hline(buf, row, '└', '─', '┘');
+    hline(buf, row, '▙', '▄', '▟');
 }

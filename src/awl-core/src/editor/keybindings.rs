@@ -164,7 +164,11 @@ pub fn handle(
         }
         Event::Key(Key::BackTab) => {
             if let Some(b) = app.current_mut() {
-                b.outdent_line();
+                if b.selection_range().is_some() {
+                    b.outdent_selection();
+                } else {
+                    b.outdent_line();
+                }
                 b.update_scroll(eh, ew);
             }
         }
@@ -257,21 +261,23 @@ pub fn handle(
                     b.delete_selection();
                 } else {
                     b.clear_selection();
-                    let prev = if b.cursor_col > 0 { b.line(b.cursor_row).chars().nth(b.cursor_col - 1) } else { None };
-                    let next = b.line(b.cursor_row).chars().nth(b.cursor_col);
-                    let is_pair = matches!(
-                        (prev, next),
-                        (Some('('), Some(')'))
-                            | (Some('['), Some(']'))
-                            | (Some('{'), Some('}'))
-                            | (Some('"'), Some('"'))
-                            | (Some('\''), Some('\''))
-                            | (Some('`'), Some('`'))
-                    );
-                    if is_pair {
-                        b.delete_forward();
+                    if !b.backspace_indent(4) {
+                        let prev = if b.cursor_col > 0 { b.line(b.cursor_row).chars().nth(b.cursor_col - 1) } else { None };
+                        let next = b.line(b.cursor_row).chars().nth(b.cursor_col);
+                        let is_pair = matches!(
+                            (prev, next),
+                            (Some('('), Some(')'))
+                                | (Some('['), Some(']'))
+                                | (Some('{'), Some('}'))
+                                | (Some('"'), Some('"'))
+                                | (Some('\''), Some('\''))
+                                | (Some('`'), Some('`'))
+                        );
+                        if is_pair {
+                            b.delete_forward();
+                        }
+                        b.backspace();
                     }
-                    b.backspace();
                 }
                 b.update_scroll(eh, ew);
             }
@@ -323,10 +329,11 @@ pub fn handle(
         Event::Key(Key::Char('\t')) => {
             if let Some(b) = app.current_mut() {
                 if b.selection_range().is_some() {
-                    b.delete_selection();
-                }
-                for _ in 0..4 {
-                    b.insert_char(' ');
+                    b.indent_selection();
+                } else {
+                    for _ in 0..4 {
+                        b.insert_char(' ');
+                    }
                 }
                 b.update_scroll(eh, ew);
             }
@@ -344,6 +351,18 @@ pub fn handle(
                     }
                     '"' | '\'' | '`' if next == Some(ch) => {
                         b.move_right();
+                    }
+                    '*' if {
+                        let prev = b.cursor_col.checked_sub(1).and_then(|c| b.line(b.cursor_row).chars().nth(c));
+                        prev == Some('/')
+                    } => {
+                        b.insert_char('*');
+                        b.insert_char(' ');
+                        b.insert_char('*');
+                        b.insert_char('/');
+                        b.move_left();
+                        b.move_left();
+                        b.move_left();
                     }
                     '(' | '[' | '{' | '"' | '\'' | '`' => {
                         let close = match ch {

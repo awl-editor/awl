@@ -138,6 +138,10 @@ pub fn handle(
                 app.document_symbols.insert(path, symbols);
                 dirty = true;
             }
+            lsp::ServerMessage::InactiveRegions { path, ranges } => {
+                app.inactive_regions.insert(path, ranges);
+                dirty = true;
+            }
             lsp::ServerMessage::FormatResult { path, edits } => {
                 if app.pending_format_saves.remove(&path) {
                     if !edits.is_empty() {

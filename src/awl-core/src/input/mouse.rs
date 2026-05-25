@@ -118,12 +118,14 @@ pub fn handle_click(app: &mut App, layout: &Layout, x: u16, y: u16, h: u16, eh: 
         if y == root_y {
             app.root_expanded = !app.root_expanded;
             app.explorer_scroll = 0;
+            app.last_click_pos = (u16::MAX, u16::MAX);
             return;
         }
         let entry_start = root_y + 1;
         if y >= entry_start && app.root_expanded {
-            let i = (y - entry_start) as usize + app.explorer_scroll;
-            if i < app.tree.len() {
+            let y_offset = (y - entry_start) as usize;
+            let Some(i) = explorer::view::explorer_click_index(app, layout, y_offset) else { return; };
+            {
                 app.explorer_selected = i;
                 app.explorer_selection.clear();
                 app.explorer_selection.insert(i);
@@ -131,6 +133,8 @@ pub fn handle_click(app: &mut App, layout: &Layout, x: u16, y: u16, h: u16, eh: 
                 let path = app.tree[i].path.clone();
                 if app.tree[i].is_dir {
                     explorer::tree::toggle(&mut app.tree, i);
+                    app.last_click_pos = (u16::MAX, u16::MAX);
+                    app.explorer_scroll = app.explorer_scroll.min(app.tree.len().saturating_sub(1));
                 } else {
                     app.push_history();
                     app.open_file(path);
@@ -146,8 +150,12 @@ pub fn handle_click(app: &mut App, layout: &Layout, x: u16, y: u16, h: u16, eh: 
         app.push_history_if_distant(5);
         let text_x = layout.editor.x + gutter_width(app);
         if let Some(b) = app.current_mut() {
-            let row = (y - layout.editor.y) as usize + b.scroll_row;
-            let col = if x >= text_x {
+            let raw_row = (y - layout.editor.y) as usize + b.scroll_row;
+            let last_row = b.line_count().saturating_sub(1);
+            let row = raw_row.min(last_row);
+            let col = if raw_row > last_row {
+                b.line(last_row).chars().count()
+            } else if x >= text_x {
                 let chars: Vec<char> = b.line(row).chars().collect();
                 let scroll_vcol = visual_col_of(&chars, b.scroll_col, 4);
                 char_at_visual(&chars, (x - text_x) as usize + scroll_vcol, 4)

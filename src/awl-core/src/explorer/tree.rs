@@ -56,6 +56,26 @@ pub fn toggle(entries: &mut Vec<Entry>, idx: usize) {
     }
 }
 
+/// Returns the tree indices of ancestor directories that should be pinned as
+/// sticky headers when scrolled past. Ordered shallowest → deepest.
+pub fn sticky_ancestors(tree: &[Entry], scroll: usize) -> Vec<usize> {
+    if scroll == 0 || tree.is_empty() { return vec![]; }
+    let first_depth = tree[scroll].depth;
+    if first_depth == 0 { return vec![]; }
+    let mut result = Vec::new();
+    let mut target_depth = first_depth;
+    for i in (0..scroll).rev() {
+        let e = &tree[i];
+        if e.is_dir && e.depth < target_depth {
+            result.push(i);
+            target_depth = e.depth;
+            if target_depth == 0 { break; }
+        }
+    }
+    result.reverse();
+    result
+}
+
 fn read_dir(path: &PathBuf, depth: usize, out: &mut Vec<Entry>) {
     let Ok(rd) = fs::read_dir(path) else { return };
     let mut children: Vec<_> = rd.filter_map(|e| e.ok()).collect();

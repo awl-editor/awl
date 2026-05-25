@@ -80,7 +80,7 @@ impl LspClient {
         thread::spawn(move || stderr_thread(stderr, logs_for_stderr));
 
         let id = next_id.fetch_add(1, Ordering::Relaxed);
-        send_raw(&writer_tx, initialize_msg(id, root));
+        send_raw(&writer_tx, initialize_msg(id, root, key));
 
         Some(Self {
             writer_tx,

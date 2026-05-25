@@ -61,24 +61,24 @@ pub fn draw_hover_card(buf: &mut Buffer, card: &mut HoverCard, w: u16, h: u16) {
     buf.fill(Rect { x: cx, y: cy, width: card_w, height: card_h }, Cell::new(' ', fg(), popup_bg()));
 
     // Top border — ▲ indicator if scrolled down.
-    buf.set(cx, cy, Cell::new('┌', popup_border(), popup_bg()));
+    buf.set(cx, cy, Cell::new('▛', popup_border(), popup_bg()));
     if has_more_above {
         let mid = cx + card_w / 2;
         for i in 1..card_w - 1 {
-            buf.set(cx + i, cy, Cell::new('─', popup_border(), popup_bg()));
+            buf.set(cx + i, cy, Cell::new('▀', popup_border(), popup_bg()));
         }
         buf.set(mid, cy, Cell::new('▲', fg_dim(), popup_bg()));
     } else {
         for i in 1..card_w - 1 {
-            buf.set(cx + i, cy, Cell::new('─', popup_border(), popup_bg()));
+            buf.set(cx + i, cy, Cell::new('▀', popup_border(), popup_bg()));
         }
     }
-    buf.set(cx + card_w - 1, cy, Cell::new('┐', popup_border(), popup_bg()));
+    buf.set(cx + card_w - 1, cy, Cell::new('▜', popup_border(), popup_bg()));
 
     for (slot, card_line) in wrapped.iter().skip(card.scroll).take(visible).enumerate() {
         let ly = cy + 1 + slot as u16;
-        buf.set(cx, ly, Cell::new('│', popup_border(), popup_bg()));
-        buf.set(cx + card_w - 1, ly, Cell::new('│', popup_border(), popup_bg()));
+        buf.set(cx, ly, Cell::new('▌', popup_border(), popup_bg()));
+        buf.set(cx + card_w - 1, ly, Cell::new('▐', popup_border(), popup_bg()));
 
         let line_idx = card.scroll + slot;
         for (col, ch) in card_line.text.chars().enumerate() {
@@ -107,19 +107,19 @@ pub fn draw_hover_card(buf: &mut Buffer, card: &mut HoverCard, w: u16, h: u16) {
 
     // Bottom border — ▼ indicator if more content below.
     let by = cy + card_h - 1;
-    buf.set(cx, by, Cell::new('└', popup_border(), popup_bg()));
+    buf.set(cx, by, Cell::new('▙', popup_border(), popup_bg()));
     if has_more_below {
         let mid = cx + card_w / 2;
         for i in 1..card_w - 1 {
-            buf.set(cx + i, by, Cell::new('─', popup_border(), popup_bg()));
+            buf.set(cx + i, by, Cell::new('▄', popup_border(), popup_bg()));
         }
         buf.set(mid, by, Cell::new('▼', fg_dim(), popup_bg()));
     } else {
         for i in 1..card_w - 1 {
-            buf.set(cx + i, by, Cell::new('─', popup_border(), popup_bg()));
+            buf.set(cx + i, by, Cell::new('▄', popup_border(), popup_bg()));
         }
     }
-    buf.set(cx + card_w - 1, by, Cell::new('┘', popup_border(), popup_bg()));
+    buf.set(cx + card_w - 1, by, Cell::new('▟', popup_border(), popup_bg()));
 }
 
 pub fn draw_completion_menu(
@@ -171,11 +171,11 @@ pub fn draw_completion_menu(
     }
 
     buf.fill(Rect { x, y, width: w, height: menu_h }, Cell::new(' ', fg(), popup_bg()));
-    buf.set(x, y, Cell::new('┌', popup_border(), popup_bg()));
+    buf.set(x, y, Cell::new('▛', popup_border(), popup_bg()));
     for i in 1..w - 1 {
-        buf.set(x + i, y, Cell::new('─', popup_border(), popup_bg()));
+        buf.set(x + i, y, Cell::new('▀', popup_border(), popup_bg()));
     }
-    buf.set(x + w - 1, y, Cell::new('┐', popup_border(), popup_bg()));
+    buf.set(x + w - 1, y, Cell::new('▜', popup_border(), popup_bg()));
 
     for (slot, &item_idx) in menu.filtered[offset..end].iter().enumerate() {
         let Some(item) = menu.items.get(item_idx) else {
@@ -185,8 +185,8 @@ pub fn draw_completion_menu(
         let is_sel = (offset + slot) == menu.selected;
         let (bg, fg) = if is_sel { (popup_hover(), popup_hover_fg()) } else { (popup_bg(), fg()) };
         buf.fill(Rect { x, y: iy, width: w, height: 1 }, Cell::new(' ', fg, bg));
-        buf.set(x, iy, Cell::new('│', popup_border(), bg));
-        buf.set(x + w - 1, iy, Cell::new('│', popup_border(), bg));
+        buf.set(x, iy, Cell::new('▌', popup_border(), bg));
+        buf.set(x + w - 1, iy, Cell::new('▐', popup_border(), bg));
 
         let label: String = item.label.chars().take(content_w).collect();
         buf.write_str(x + 2, iy, &label, fg, bg);
@@ -206,9 +206,9 @@ pub fn draw_completion_menu(
     }
 
     let by = y + menu_h - 1;
-    buf.set(x, by, Cell::new('└', popup_border(), popup_bg()));
+    buf.set(x, by, Cell::new('▙', popup_border(), popup_bg()));
     for i in 1..w - 1 {
-        buf.set(x + i, by, Cell::new('─', popup_border(), popup_bg()));
+        buf.set(x + i, by, Cell::new('▄', popup_border(), popup_bg()));
     }
-    buf.set(x + w - 1, by, Cell::new('┘', popup_border(), popup_bg()));
+    buf.set(x + w - 1, by, Cell::new('▟', popup_border(), popup_bg()));
 }

@@ -13,12 +13,21 @@ impl Buffer {
     pub fn insert_newline(&mut self) {
         self.push_undo(false);
         let line = self.line(self.cursor_row);
+        let in_leading_ws = line.chars().take(self.cursor_col).all(|c| c == ' ' || c == '\t');
+        if in_leading_ws {
+            let line_start = self.rope.line_to_char(self.cursor_row);
+            self.rope.insert_char(line_start, '\n');
+            self.cursor_row += 1;
+            self.cursor_col = 0;
+            self.modified = true;
+            self.lsp_version += 1;
+            return;
+        }
         let indent: String = line.chars().take_while(|&c| c == ' ' || c == '\t').collect();
         let prev_ch = if self.cursor_col > 0 { line.chars().nth(self.cursor_col - 1) } else { None };
         let next_ch = line.chars().nth(self.cursor_col);
         let extra = matches!(prev_ch, Some('{') | Some('(') | Some('['));
-        let between = extra && matches!((prev_ch, next_ch),
-            (Some('{'), Some('}')) | (Some('('), Some(')')) | (Some('['), Some(']')));
+        let between = extra && matches!((prev_ch, next_ch), (Some('{'), Some('}')) | (Some('('), Some(')')) | (Some('['), Some(']')));
 
         let idx = self.char_idx();
         self.rope.insert_char(idx, '\n');
@@ -45,6 +54,31 @@ impl Buffer {
         self.lsp_version += 1;
     }
 
+    /// Smart-indent backspace: if every character before the cursor on this
+    /// line is a space, delete back to the previous tab stop rather than one
+    /// character at a time.  Returns `true` if it handled the deletion.
+    pub fn backspace_indent(&mut self, indent_size: usize) -> bool {
+        if self.cursor_col == 0 {
+            return false;
+        }
+        let line = self.line(self.cursor_row);
+        if !line.chars().take(self.cursor_col).all(|c| c == ' ') {
+            return false;
+        }
+        let remove = match self.cursor_col % indent_size {
+            0 => indent_size,
+            r => r,
+        }
+        .min(self.cursor_col);
+        self.push_undo(false);
+        let idx = self.char_idx();
+        self.rope.remove(idx - remove..idx);
+        self.cursor_col -= remove;
+        self.modified = true;
+        self.lsp_version += 1;
+        true
+    }
+
     pub fn backspace(&mut self) {
         if self.cursor_col == 0 && self.cursor_row == 0 {
             return;
@@ -66,14 +100,18 @@ impl Buffer {
     }
 
     pub fn delete_word_back(&mut self) {
-        if self.cursor_col == 0 && self.cursor_row == 0 { return; }
+        if self.cursor_col == 0 && self.cursor_row == 0 {
+            return;
+        }
         self.push_undo(false);
         let old_row = self.cursor_row;
         let old_col = self.cursor_col;
         self.move_word_left();
         let start = self.rope.line_to_char(self.cursor_row) + self.cursor_col;
-        let end   = self.rope.line_to_char(old_row) + old_col;
-        if start < end { self.rope.remove(start..end); }
+        let end = self.rope.line_to_char(old_row) + old_col;
+        if start < end {
+            self.rope.remove(start..end);
+        }
         self.modified = true;
         self.lsp_version += 1;
     }
@@ -119,7 +157,10 @@ impl Buffer {
         self.push_undo(false);
         let mut skip_lf = false;
         for ch in text.chars() {
-            if skip_lf && ch == '\n' { skip_lf = false; continue; }
+            if skip_lf && ch == '\n' {
+                skip_lf = false;
+                continue;
+            }
             skip_lf = false;
             let idx = self.char_idx();
             if ch == '\r' {

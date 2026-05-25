@@ -74,6 +74,7 @@ pub struct DocumentSymbol {
 pub enum ServerMessage {
     Diagnostics { path: PathBuf, items: Vec<LspDiagnostic> },
     SemanticTokens { path: PathBuf, tokens: Vec<SemanticToken> },
+    InactiveRegions { path: PathBuf, ranges: Vec<(u32, u32)> },
     Hover { path: PathBuf, segments: Vec<HoverSegment> },
     GotoLocation { kind: GotoKind, path: PathBuf, line: u32, col: u32 },
     RenameApply { edits: Vec<FileEdits> },

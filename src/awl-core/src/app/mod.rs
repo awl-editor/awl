@@ -50,6 +50,7 @@ pub struct App {
     pub lsp: LspManager,
     pub diagnostics: HashMap<PathBuf, Vec<LspDiagnostic>>,
     pub semantic_tokens: HashMap<PathBuf, Vec<SemanticToken>>,
+    pub inactive_regions: HashMap<PathBuf, Vec<(u32, u32)>>,
     pub lsp_menu: Option<crate::popup::LspContextMenu>,
     pub lsp_button_end: u16,
     pub hover_card: Option<crate::popup::HoverCard>,
@@ -112,6 +113,7 @@ impl App {
     pub fn new(root: PathBuf) -> Self {
         let tree = tree::load(&root);
         let (git_root, git_branch, git_status) = git::load(&root);
+        let lsp = LspManager::new(root.clone());
         Self {
             root,
             tree,
@@ -133,9 +135,10 @@ impl App {
             context_menu: None,
             prompt: None,
             file_clipboard: None,
-            lsp: LspManager::new(),
+            lsp,
             diagnostics: HashMap::new(),
             semantic_tokens: HashMap::new(),
+            inactive_regions: HashMap::new(),
             lsp_menu: None,
             lsp_button_end: 0,
             hover_card: None,

@@ -118,23 +118,53 @@ pub fn draw_editor(buf: &mut Buffer, app: &mut App, layout: &Layout, highlights:
     let vis_start = active.scroll_row;
     let visible_meta: Vec<(bool, usize)> = (vis_start..vis_start + rows + 1).map(|r| active.line_meta(r)).collect();
     let meta = |r: usize| -> (bool, usize) { if r >= vis_start && r < vis_start + visible_meta.len() { visible_meta[r - vis_start] } else { active.line_meta(r) } };
-    let line_lws = |r: usize| -> usize { meta(r).1 };
     let line_is_blank = |r: usize| -> bool { meta(r).0 };
 
+    // Visual leading-whitespace width (tabs expanded) — used for all guide logic.
+    let vis_lws = |r: usize| -> usize {
+        let mut vcol = 0usize;
+        for ch in active.line(r).chars() {
+            match ch {
+                '\t' => vcol = (vcol / tab_size + 1) * tab_size,
+                ' '  => vcol += 1,
+                _    => break,
+            }
+        }
+        vcol
+    };
+
+    // Detect the indent unit from visible non-blank lines via GCD of their
+    // visual leading widths.  Falls back to tab_size for tab-indented files or
+    // when no indented lines are visible.
+    let guide_unit = {
+        fn gcd(a: usize, b: usize) -> usize { if b == 0 { a } else { gcd(b, a % b) } }
+        let scan_end_gu = (vis_start + rows).min(active.line_count());
+        let mut uses_tabs = false;
+        let mut g = 0usize;
+        for r in vis_start..scan_end_gu {
+            if line_is_blank(r) { continue; }
+            let char_lws = meta(r).1;
+            let vlws = vis_lws(r);
+            if char_lws > 0 && vlws > char_lws { uses_tabs = true; break; }
+            if vlws > 0 { g = if g == 0 { vlws } else { gcd(g, vlws) }; }
+        }
+        if uses_tabs || g <= 1 { tab_size } else { g }
+    };
+
     let cursor_row = active.cursor_row;
-    let cursor_lws = line_lws(cursor_row);
+    let cursor_lws = vis_lws(cursor_row);
 
     let scan_end = (vis_start + rows).min(active.line_count());
-    let next_nb_lws = (cursor_row + 1..scan_end).find(|&r| !line_is_blank(r)).map(line_lws).unwrap_or(0);
-    let prev_nb_lws = (vis_start..cursor_row).rev().find(|&r| !line_is_blank(r)).map(line_lws).unwrap_or(0);
+    let next_nb_lws = (cursor_row + 1..scan_end).find(|&r| !line_is_blank(r)).map(|r| vis_lws(r)).unwrap_or(0);
+    let prev_nb_lws = (vis_start..cursor_row).rev().find(|&r| !line_is_blank(r)).map(|r| vis_lws(r)).unwrap_or(0);
 
     let active_guide_col: Option<usize> = {
         let is_boundary = next_nb_lws > cursor_lws || prev_nb_lws > cursor_lws;
         if is_boundary {
-            Some((cursor_lws / tab_size) * tab_size)
+            Some((cursor_lws / guide_unit) * guide_unit)
         } else if cursor_lws > 0 {
-            let level = cursor_lws / tab_size;
-            if level > 0 { Some((level - 1) * tab_size) } else { None }
+            let level = cursor_lws / guide_unit;
+            if level > 0 { Some((level - 1) * guide_unit) } else { None }
         } else {
             None
         }
@@ -149,14 +179,14 @@ pub fn draw_editor(buf: &mut Buffer, app: &mut App, layout: &Layout, highlights:
         while r > scan_low {
             let p = r - 1;
             if line_is_blank(p) {
-                let has_more = (scan_low..p).rev().find(|&q| !line_is_blank(q)).map(|q| line_lws(q) > agc).unwrap_or(false);
+                let has_more = (scan_low..p).rev().find(|&q| !line_is_blank(q)).map(|q| vis_lws(q) > agc).unwrap_or(false);
                 if has_more {
                     start = p;
                     r = p;
                 } else {
                     break;
                 }
-            } else if line_lws(p) > agc {
+            } else if vis_lws(p) > agc {
                 start = p;
                 r = p;
             } else {
@@ -168,14 +198,14 @@ pub fn draw_editor(buf: &mut Buffer, app: &mut App, layout: &Layout, highlights:
         while r + 1 < scan_high {
             let n = r + 1;
             if line_is_blank(n) {
-                let has_more = (n + 1..scan_high).find(|&q| !line_is_blank(q)).map(|q| line_lws(q) > agc).unwrap_or(false);
+                let has_more = (n + 1..scan_high).find(|&q| !line_is_blank(q)).map(|q| vis_lws(q) > agc).unwrap_or(false);
                 if has_more {
                     end = n;
                     r = n;
                 } else {
                     break;
                 }
-            } else if line_lws(n) > agc {
+            } else if vis_lws(n) > agc {
                 end = n;
                 r = n;
             } else {
@@ -215,8 +245,11 @@ pub fn draw_editor(buf: &mut Buffer, app: &mut App, layout: &Layout, highlights:
         m
     };
 
+    let inactive_ranges: &[(u32, u32)] = app.inactive_regions.get(&active.path).map(|v| v.as_slice()).unwrap_or(&[]);
+
     for row_offset in 0..rows {
         let buf_row = active.scroll_row + row_offset;
+        let is_inactive = inactive_ranges.iter().any(|&(s, e)| buf_row as u32 >= s && buf_row as u32 <= e);
         let sy = layout.editor.y + row_offset as u16;
         let is_cursor = app.editor_focused && buf_row == active.cursor_row;
         let line_bg = if is_cursor { bg_cursor() } else { bg_main() };
@@ -241,21 +274,10 @@ pub fn draw_editor(buf: &mut Buffer, app: &mut App, layout: &Layout, highlights:
         let line = active.line(buf_row);
         let chars: Vec<char> = line.chars().collect();
         let leading_ws: usize = chars.iter().take_while(|&&c| c == ' ' || c == '\t').count();
-        let row_vis_lws = |r: usize| -> usize {
-            let mut vcol = 0usize;
-            for ch in active.line(r).chars() {
-                match ch {
-                    '\t' => vcol = (vcol / tab_size + 1) * tab_size,
-                    ' ' => vcol += 1,
-                    _ => break,
-                }
-            }
-            vcol
-        };
         let effective_lws = if buf_row >= active.line_count() || line.trim().is_empty() {
             let vis_end = (vis_start + visible_meta.len()).min(active.line_count());
-            let prev = (vis_start..buf_row).rev().find(|&r| !meta(r).0).map(row_vis_lws).unwrap_or(0);
-            let next = (buf_row + 1..vis_end).find(|&r| !meta(r).0).map(row_vis_lws).unwrap_or(0);
+            let prev = (vis_start..buf_row).rev().find(|&r| !meta(r).0).map(|r| vis_lws(r)).unwrap_or(0);
+            let next = (buf_row + 1..vis_end).find(|&r| !meta(r).0).map(|r| vis_lws(r)).unwrap_or(0);
             prev.max(next)
         } else {
             visual_col_of(&chars, leading_ws, tab_size)
@@ -297,10 +319,13 @@ pub fn draw_editor(buf: &mut Buffer, app: &mut App, layout: &Layout, highlights:
             };
             if let Some((ch, buf_col)) = vis_cells.get(vcol).copied() {
                 let sem = row_sem.iter().find(|t| buf_col >= t.col_start as usize && buf_col < t.col_end as usize);
-                let fg = if let Some(t) = sem {
-                    semantic_color(&t.token_type).unwrap_or_else(|| span_color(highlights, app.active_tab, buf_row, buf_col))
+                let ts_color = span_color(highlights, app.active_tab, buf_row, buf_col);
+                let fg = if is_inactive {
+                    dim_color(ts_color, line_bg)
+                } else if let Some(t) = sem {
+                    semantic_color(&t.token_type).unwrap_or(ts_color)
                 } else {
-                    span_color(highlights, app.active_tab, buf_row, buf_col)
+                    ts_color
                 };
                 let diag = row_diags.iter().find(|d| {
                     let end = if d.col_end > d.col_start { d.col_end } else { d.col_start + 1 };
@@ -317,7 +342,7 @@ pub fn draw_editor(buf: &mut Buffer, app: &mut App, layout: &Layout, highlights:
                     ),
                     None => (UnderlineStyle::None, None),
                 };
-                let is_guide = ch == ' ' && buf_col < leading_ws && vcol % tab_size == 0 && !sel_contains(sel, buf_row, buf_col);
+                let is_guide = ch == ' ' && vcol % guide_unit == 0 && vcol + guide_unit <= effective_lws && !sel_contains(sel, buf_row, buf_col);
                 if is_guide {
                     let guide_fg = match active_guide_col {
                         Some(c) if c == buf_col && buf_row >= block_start && buf_row <= block_end => guide_active(),
@@ -327,7 +352,7 @@ pub fn draw_editor(buf: &mut Buffer, app: &mut App, layout: &Layout, highlights:
                 } else {
                     buf.set(sx, sy, Cell { ch, fg, bg: cell_bg, bold: false, underline, underline_color: ul_color });
                 }
-            } else if vcol < effective_lws && vcol % tab_size == 0 && !sel_contains(sel, buf_row, eol_col) {
+            } else if vcol % guide_unit == 0 && vcol + guide_unit <= effective_lws && !sel_contains(sel, buf_row, eol_col) {
                 let guide_fg = match active_guide_col {
                     Some(c) if c == vcol && buf_row >= block_start && buf_row <= block_end => guide_active(),
                     _ => guide(),
@@ -411,6 +436,14 @@ fn semantic_color(token_type: &str) -> Option<Color> {
 
         _ => return None,
     })
+}
+
+fn dim_color(fg: Color, bg: Color) -> Color {
+    Color::rgb(
+        (fg.r as u16 * 45 / 100 + bg.r as u16 * 55 / 100) as u8,
+        (fg.g as u16 * 45 / 100 + bg.g as u16 * 55 / 100) as u8,
+        (fg.b as u16 * 45 / 100 + bg.b as u16 * 55 / 100) as u8,
+    )
 }
 
 fn span_color(highlights: &[Option<highlight::Highlights>], tab: usize, row: usize, col: usize) -> Color {

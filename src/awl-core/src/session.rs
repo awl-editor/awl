@@ -101,7 +101,8 @@ pub fn restore(app: &mut App, session: Session) {
         }
     }
 
-    app.explorer_scroll = session.explorer_scroll;
+    // Don't restore scroll — start at the top so hidden/dot directories are visible.
+    app.explorer_scroll = 0;
     let mut tab_map: Vec<usize> = Vec::new();
 
     for tab_state in &session.tabs {

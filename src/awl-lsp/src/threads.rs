@@ -130,6 +130,12 @@ fn dispatch(
     let id = val.get("id").and_then(|v| v.as_i64());
 
     if let Some(id) = id {
+        if val.get("method").is_some() {
+            let resp = serde_json::json!({"jsonrpc":"2.0","id":id,"result":null}).to_string();
+            let _ = writer_tx.send(WriterMsg::Data(resp));
+            return;
+        }
+
         if let Some(result) = val.get("result") {
             if result.get("capabilities").is_some() {
                 if let Some(types) = result.pointer("/capabilities/semanticTokensProvider/legend/tokenTypes").and_then(|t| t.as_array()) {
@@ -239,5 +245,21 @@ fn dispatch(
         let Some(path) = uri_to_path(uri_str) else { return };
         let items = diags.iter().filter_map(parse_diagnostic).collect();
         let _ = tx.send(ServerMessage::Diagnostics { path, items });
+        return;
+    }
+
+    if method == "textDocument/inactiveRegions" {
+        let Some(params) = val.get("params") else { return };
+        let Some(uri_str) = params.pointer("/textDocument/uri").and_then(|u| u.as_str()) else { return };
+        let Some(path) = uri_to_path(uri_str) else { return };
+        let ranges = params.get("regions")
+            .and_then(|r| r.as_array())
+            .map(|arr| arr.iter().filter_map(|r| {
+                let start = r.pointer("/start/line")?.as_u64()? as u32;
+                let end = r.pointer("/end/line")?.as_u64()? as u32;
+                Some((start, end))
+            }).collect())
+            .unwrap_or_default();
+        let _ = tx.send(ServerMessage::InactiveRegions { path, ranges });
     }
 }

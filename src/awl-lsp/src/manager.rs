@@ -6,24 +6,22 @@ use std::path::{Path, PathBuf};
 
 pub struct LspManager {
     clients: HashMap<&'static str, LspClient>,
-}
-
-impl Default for LspManager {
-    fn default() -> Self {
-        Self::new()
-    }
+    project_root: PathBuf,
 }
 
 impl LspManager {
-    pub fn new() -> Self {
-        Self { clients: HashMap::new() }
+    pub fn new(project_root: PathBuf) -> Self {
+        Self { clients: HashMap::new(), project_root }
     }
 
     pub fn open(&mut self, path: &Path, text: &str) {
         let Some(lang) = lang_id(path) else { return };
         let Some(key) = server_key(lang) else { return };
         if !self.clients.contains_key(key) {
-            let root = find_root(key, path);
+            // Use the project root (cwd where awl was launched) as the hint for
+            // find_root, not the file path. This avoids starting rust-analyzer
+            // rooted at ~/.cargo/registry when a dependency file is open.
+            let root = find_root(key, &self.project_root);
             if let Some(client) = LspClient::start(key, &root) {
                 self.clients.insert(key, client);
             }
@@ -148,11 +146,11 @@ impl LspManager {
         self.clients.contains_key(key)
     }
 
-    pub fn start_for_path(&mut self, key: &'static str, path: &Path) {
+    pub fn start_for_path(&mut self, key: &'static str, _path: &Path) {
         if self.clients.contains_key(key) {
             return;
         }
-        let root = find_root(key, path);
+        let root = find_root(key, &self.project_root);
         if let Some(client) = LspClient::start(key, &root) {
             self.clients.insert(key, client);
         }
@@ -181,3 +179,4 @@ impl LspManager {
         }
     }
 }
+

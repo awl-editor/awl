@@ -167,6 +167,7 @@ fn grammar_for(lang: &str) -> Option<(Language, &'static str)> {
         "json" => Some((tree_sitter_json::LANGUAGE.into(), tree_sitter_json::HIGHLIGHTS_QUERY)),
         "ini" => Some((tree_sitter_ini::LANGUAGE.into(), tree_sitter_ini::HIGHLIGHTS_QUERY)),
         "bash" => Some((tree_sitter_bash::LANGUAGE.into(), tree_sitter_bash::HIGHLIGHT_QUERY)),
+        "yaml" => Some((tree_sitter_yaml::LANGUAGE.into(), tree_sitter_yaml::HIGHLIGHTS_QUERY)),
         _ => None,
     }
 }

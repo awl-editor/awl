@@ -52,10 +52,10 @@ pub fn draw_finder(buf: &mut Buffer, finder: &FinderPopup, root: &Path, w: u16, 
         let res_mid = left_w / 2;
         let prev_mid = left_w + (pw - left_w) / 2;
 
-        buf.set(px, py, Cell::new('┌', popup_border(), popup_bg()));
+        buf.set(px, py, Cell::new('▛', popup_border(), popup_bg()));
         for i in 1u16..pw - 1 {
             if i == left_w {
-                buf.set(px + i, py, Cell::new('┬', popup_border(), popup_bg()));
+                buf.set(px + i, py, Cell::new('▀', popup_border(), popup_bg()));
                 continue;
             }
 
@@ -64,16 +64,16 @@ pub fn draw_finder(buf: &mut Buffer, finder: &FinderPopup, root: &Path, w: u16, 
 
             let (ch, fg) = if in_res {
                 let ci = (i - res_mid.saturating_sub(res_label.len() as u16 / 2)) as usize;
-                (res_label.chars().nth(ci).unwrap_or('─'), finder_title_fg())
+                (res_label.chars().nth(ci).unwrap_or('▀'), finder_title_fg())
             } else if in_prev {
                 let ci = (i - prev_mid.saturating_sub(prev_label.len() as u16 / 2)) as usize;
-                (prev_label.chars().nth(ci).unwrap_or('─'), finder_title_fg())
+                (prev_label.chars().nth(ci).unwrap_or('▀'), finder_title_fg())
             } else {
-                ('─', popup_border())
+                ('▀', popup_border())
             };
             buf.set(px + i, py, Cell::new(ch, fg, popup_bg()));
         }
-        buf.set(px + pw - 1, py, Cell::new('┐', popup_border(), popup_bg()));
+        buf.set(px + pw - 1, py, Cell::new('▜', popup_border(), popup_bg()));
     }
 
     let content_y0 = py + CONTENT_TOP_OFFSET;
@@ -81,9 +81,9 @@ pub fn draw_finder(buf: &mut Buffer, finder: &FinderPopup, root: &Path, w: u16, 
     let content_rows = (content_y1 - content_y0) as usize;
 
     for y in content_y0..content_y1 {
-        buf.set(px, y, Cell::new('│', popup_border(), popup_bg()));
+        buf.set(px, y, Cell::new('▌', popup_border(), popup_bg()));
         buf.set(split_x, y, Cell::new('│', popup_border(), popup_bg()));
-        buf.set(px + pw - 1, y, Cell::new('│', popup_border(), popup_bg()));
+        buf.set(px + pw - 1, y, Cell::new('▐', popup_border(), popup_bg()));
     }
 
     const LNUM_W: usize = 4;
@@ -222,16 +222,15 @@ pub fn draw_finder(buf: &mut Buffer, finder: &FinderPopup, root: &Path, w: u16, 
     }
 
     let sep_y = content_y1;
-    buf.set(px, sep_y, Cell::new('├', popup_border(), popup_bg()));
+    buf.set(px, sep_y, Cell::new('▌', popup_border(), popup_bg()));
     for i in 1..pw - 1 {
-        let c = if i == left_w { '┴' } else { '─' };
-        buf.set(px + i, sep_y, Cell::new(c, popup_border(), popup_bg()));
+        buf.set(px + i, sep_y, Cell::new('─', popup_border(), popup_bg()));
     }
-    buf.set(px + pw - 1, sep_y, Cell::new('┤', popup_border(), popup_bg()));
+    buf.set(px + pw - 1, sep_y, Cell::new('▐', popup_border(), popup_bg()));
 
     let input_y = py + ph - INPUT_ROW_OFFSET;
-    buf.set(px, input_y, Cell::new('│', popup_border(), popup_bg()));
-    buf.set(px + pw - 1, input_y, Cell::new('│', popup_border(), popup_bg()));
+    buf.set(px, input_y, Cell::new('▌', popup_border(), popup_bg()));
+    buf.set(px + pw - 1, input_y, Cell::new('▐', popup_border(), popup_bg()));
     buf.write_str(px + 2, input_y, "▶", finder_accent(), popup_bg());
 
     let query_max = (pw as usize).saturating_sub(18);
@@ -261,17 +260,17 @@ pub fn draw_finder(buf: &mut Buffer, finder: &FinderPopup, root: &Path, w: u16, 
     let bot_label_vis: String = bot_label.chars().take((pw as usize).saturating_sub(4)).collect();
     let title_start = (pw.saturating_sub(bot_label_vis.len() as u16)) / 2;
 
-    buf.set(px, bot_y, Cell::new('└', popup_border(), popup_bg()));
+    buf.set(px, bot_y, Cell::new('▙', popup_border(), popup_bg()));
     for i in 1u16..pw - 1 {
         if i >= title_start && (i as usize) < title_start as usize + bot_label_vis.len() {
-            let ch = bot_label_vis.chars().nth((i - title_start) as usize).unwrap_or('─');
+            let ch = bot_label_vis.chars().nth((i - title_start) as usize).unwrap_or('▄');
             let fg = if ch == ' ' { popup_border() } else { finder_title_query_fg() };
             buf.set(px + i, bot_y, Cell::new(ch, fg, popup_bg()));
         } else {
-            buf.set(px + i, bot_y, Cell::new('─', popup_border(), popup_bg()));
+            buf.set(px + i, bot_y, Cell::new('▄', popup_border(), popup_bg()));
         }
     }
-    buf.set(px + pw - 1, bot_y, Cell::new('┘', popup_border(), popup_bg()));
+    buf.set(px + pw - 1, bot_y, Cell::new('▟', popup_border(), popup_bg()));
 }
 
 fn label_hit(i: u16, mid: u16, label_len: u16) -> bool {
