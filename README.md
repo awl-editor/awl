@@ -1,9 +1,15 @@
-# awl
 
-<img width="3829" height="2085" alt="2026-05-25_01-16" src="https://github.com/user-attachments/assets/3d20d28d-5e5b-4f0f-bc8f-56d641a1d2f6" />
+<div align="center">
 
+<img width="100" height="100" alt="image" src="https://github.com/user-attachments/assets/79d08d20-88fd-4ccf-a741-f8820d0f7f48" />
+
+
+## awl
 
 A mouse centered text editor for UNIX based ANSI terminals.
+
+<img width="3829" height="2085" alt="2026-05-25_01-16" src="https://github.com/user-attachments/assets/3d20d28d-5e5b-4f0f-bc8f-56d641a1d2f6" />
+</div>
 
 ## Installation
 
