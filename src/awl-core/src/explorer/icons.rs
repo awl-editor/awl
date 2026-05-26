@@ -4,7 +4,7 @@ use ui::cell::Color;
 /// Returns the Nerd Font glyph for a file/directory entry.
 pub fn glyph(name: &str, is_dir: bool, expanded: bool) -> &'static str {
     if is_dir {
-        return if expanded { "\u{f115}" } else { "\u{f114}" };
+        return if expanded { "\u{e5fe}" } else { "\u{ea83}" };
     }
     match name {
         // Rust
@@ -12,7 +12,7 @@ pub fn glyph(name: &str, is_dir: bool, expanded: bool) -> &'static str {
         ".rustfmt.toml" | "rust-toolchain.toml" | "rust-toolchain" => "\u{e7a8}",
         // JavaScript / Node
         "package.json" => "\u{e60b}",
-        "package-lock.json" | "yarn.lock" | "pnpm-lock.yaml" | "bun.lockb" => "\u{e71e}",
+        "package-lock.json" | "yarn.lock" | "pnpm-lock.yaml" | "bun.lockb" | "bun.lock" => "\u{e672}",
         ".nvmrc" | ".node-version" => "\u{e74e}",
         ".npmrc" | ".yarnrc" | ".yarnrc.yml" => "\u{e71e}",
         // JS tooling
@@ -25,7 +25,7 @@ pub fn glyph(name: &str, is_dir: bool, expanded: bool) -> &'static str {
         | ".prettierrc.yml"
         | ".prettierignore"
         | "prettier.config.js"
-        | "prettier.config.cjs" => "\u{e6b9}",
+        | "prettier.config.cjs" => "\u{e6b4}",
         "babel.config.js" | "babel.config.cjs" | "babel.config.ts" | ".babelrc" | ".babelrc.js" | ".babelrc.json" => "\u{e74e}",
         "webpack.config.js" | "webpack.config.ts" | "webpack.config.cjs" => "\u{e6d7}",
         "vite.config.js" | "vite.config.ts" | "vite.config.mjs" => "\u{e6c4}",
@@ -48,7 +48,7 @@ pub fn glyph(name: &str, is_dir: bool, expanded: bool) -> &'static str {
         "composer.json" | "composer.lock" => "\u{e73d}",
         // Java / JVM
         "pom.xml" => "\u{e738}",
-        "build.gradle" | "build.gradle.kts" | "settings.gradle" | "settings.gradle.kts" | "gradlew" | "gradlew.bat" => "\u{e70e}",
+        "build.gradle" | "build.gradle.kts" | "settings.gradle" | "settings.gradle.kts" | "gradlew" | "gradlew.bat" => "\u{e660}",
         // Go
         "go.mod" | "go.sum" | "go.work" | "go.work.sum" => "\u{e627}",
         // Elixir
@@ -112,7 +112,8 @@ fn glyph_by_ext(name: &str) -> &'static str {
         "jar" | "war" | "ear" => "\u{e738}",
         "kt" | "kts" => "\u{e634}",
         "scala" | "sc" | "sbt" => "\u{e737}",
-        "groovy" | "gradle" => "\u{e70e}",
+        "gradle" => "\u{e660}",
+        "groovy" => "\u{e775}",
         "clj" | "cljs" | "cljc" | "edn" => "\u{e76a}",
         // Scripting
         "py" | "pyw" | "pyi" | "pyx" => "\u{e606}",
@@ -151,7 +152,7 @@ fn glyph_by_ext(name: &str) -> &'static str {
         "rkt" | "rktl" => "\u{e76a}",
         "lisp" | "lsp" | "cl" | "el" | "elc" => "\u{e76a}",
         // Shell / system
-        "sh" | "bash" | "ksh" | "csh" | "tcsh" => "\u{f489}",
+        "sh" | "bash" | "ksh" | "csh" | "tcsh" => "\u{f0477}",
         "zsh" | "fish" | "nu" | "ion" => "\u{f489}",
         "ps1" | "psm1" | "psd1" | "ps1xml" => "\u{ebc7}",
         "bat" | "cmd" => "\u{ebc4}",
@@ -182,7 +183,7 @@ fn glyph_by_ext(name: &str) -> &'static str {
         "json" | "jsonc" | "json5" => "\u{e60b}",
         "toml" => "\u{e6b2}",
         "yaml" | "yml" => "\u{f481}",
-        "xml" | "xsl" | "xslt" | "dtd" | "xsd" => "\u{e796}",
+        "xml" | "xsl" | "xslt" | "dtd" | "xsd" => "\u{f05c0}",
         "csv" | "tsv" => "\u{f1c3}",
         "ini" | "cfg" | "conf" | "config" => "\u{e615}",
         "properties" | "props" => "\u{e615}",
@@ -194,7 +195,7 @@ fn glyph_by_ext(name: &str) -> &'static str {
         "rst" | "rest" => "\u{f15c}",
         "org" => "\u{eaa4}",
         "tex" | "ltx" | "sty" | "cls" | "bib" => "\u{e69b}",
-        "txt" | "text" => "\u{f15c}",
+        "txt" | "text" => "\u{e64e}",
         "log" => "\u{f17c}",
         "diff" | "patch" => "\u{f440}",
         "http" => "\u{f0ac}",
@@ -211,10 +212,10 @@ fn glyph_by_ext(name: &str) -> &'static str {
         "sql" | "mysql" | "pgsql" | "plsql" => "\u{f1c0}",
         "sqlite" | "db" | "mdb" | "accdb" => "\u{f1c0}",
         // Media
-        "png" | "jpg" | "jpeg" | "gif" | "webp" => "\u{f1c5}",
-        "bmp" | "tiff" | "tga" | "raw" | "heic" => "\u{f1c5}",
-        "svg" | "ico" | "icns" => "\u{f1c5}",
-        "psd" | "ai" | "xd" | "sketch" | "fig" => "\u{f1c5}",
+        "png" | "jpg" | "jpeg" | "gif" | "webp" => "\u{e60d}",
+        "bmp" | "tiff" | "tga" | "raw" | "heic" => "\u{e60d}",
+        "svg" | "ico" | "icns" => "\u{e60d}",
+        "psd" | "ai" | "xd" | "sketch" | "fig" => "\u{e60d}",
         "mp3" | "wav" | "flac" | "ogg" | "m4a" | "aac" | "opus" => "\u{f1c7}",
         "mp4" | "mkv" | "avi" | "mov" | "webm" | "flv" | "wmv" => "\u{f1c8}",
         // 3D
@@ -238,7 +239,7 @@ fn glyph_by_ext(name: &str) -> &'static str {
         "iso" | "img" | "dmg" => "\u{f0a0}",
         "hex" => "\u{f471}",
         "lock" => "\u{f023}",
-        _ => "\u{f15b}",
+        _ => "\u{eb60}",
     }
 }
 
