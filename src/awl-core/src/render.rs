@@ -17,9 +17,11 @@ use crate::popup::dialog::{draw_confirm_dialog, draw_external_change_dialog, dra
 use crate::popup::finder::draw_finder;
 use crate::statusbar::view::{draw_divider, draw_statusbar};
 use crate::tabs::view::{NAV_WIDTH, draw_tabbar, ensure_active_tab_visible};
+use crate::terminal::view::draw_terminal;
 
 pub fn draw(buf: &mut Buffer, app: &mut App, highlights: &[Option<highlight::Highlights>], w: u16, h: u16) {
-    let layout = Layout::compute_mode(w, h, app.explorer_width, app.minimal_mode);
+    let panel_height = app_panel_height(app);
+    let layout = Layout::compute_mode(w, h, app.explorer_width, app.minimal_mode, panel_height);
     if !app.minimal_mode {
         let tab_available = layout.tab_bar.width.saturating_sub(NAV_WIDTH) as usize;
         ensure_active_tab_visible(app, tab_available);
@@ -28,6 +30,7 @@ pub fn draw(buf: &mut Buffer, app: &mut App, highlights: &[Option<highlight::Hig
         crate::explorer::view::draw_explorer(buf, app, &layout);
         draw_divider(buf, app, &layout);
     }
+    draw_terminal(buf, app, &layout);
     draw_editor(buf, app, &layout, highlights);
     draw_scrollbar(buf, app, &layout);
     draw_statusbar(buf, app, &layout);
@@ -111,4 +114,8 @@ pub fn extract_card_selection(lines: &[popup::CardLine], anchor: (usize, usize),
         result.extend(chars[col_start..col_end].iter());
     }
     result
+}
+
+pub fn app_panel_height(app: &App) -> u16 {
+    if app.terminal.is_some() { app.terminal_height + 1 } else { 0 }
 }

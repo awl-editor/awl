@@ -785,7 +785,7 @@ pub fn handle(
                         app.dragging = false;
                         app.dragging_divider = false;
                         app.dragging_scrollbar = false;
-                    } else if layout.scrollbar.width > 0 && x == layout.scrollbar.x && y >= layout.scrollbar.y && y < layout.scrollbar.y + layout.scrollbar.height {
+                    } else if layout.scrollbar.width > 0 && (x == layout.scrollbar.x || (layout.scrollbar.x > 0 && x == layout.scrollbar.x - 1)) && y >= layout.scrollbar.y && y < layout.scrollbar.y + layout.scrollbar.height {
                         app.dragging_divider = false;
                         app.dragging = false;
                         app.dragging_scrollbar = true;

@@ -25,7 +25,7 @@ thumb = "#332f26"
 [statusbar]
 branch_bg = "#807b6e"
 lsp_bg    = "#473f37"
-file_bg   = "#1b1b18"
+file_bg   = "#232320"
 fg        = "#e6cf9a"
 fg_dim    = "#a8b6bc"
 powerline = ""

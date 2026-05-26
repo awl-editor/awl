@@ -78,7 +78,7 @@ pub fn pointer_shape_for(app: &App, mx: u16, my: u16, w: u16, h: u16) -> Pointer
         return PointerShape::Default;
     }
 
-    let layout = Layout::compute_mode(w, h, app.explorer_width, app.minimal_mode);
+    let layout = Layout::compute_mode(w, h, app.explorer_width, app.minimal_mode, crate::render::app_panel_height(app));
 
     // divider: ColResize anywhere along the divider column.
     if !app.minimal_mode && layout.divider.width > 0 && mx == layout.divider.x && my < layout.divider.y + layout.divider.height {
@@ -191,7 +191,29 @@ pub fn sync_cursor<W: Write>(out: &mut W, app: &App, w: u16, h: u16) -> io::Resu
         return Ok(());
     }
 
-    let layout = Layout::compute_mode(w, h, app.explorer_width, app.minimal_mode);
+    let layout = Layout::compute_mode(w, h, app.explorer_width, app.minimal_mode, crate::render::app_panel_height(app));
+
+    if app.terminal_focused {
+        if let Some(term) = &app.terminal {
+            let tr = layout.terminal;
+            let visible = term.state.scroll_offset == 0
+                && tr.height > 0
+                && term.state.cursor_row < tr.height as usize
+                && term.state.cursor_col < tr.width.saturating_sub(2) as usize;
+            if visible {
+                const PAD: u16 = 2;
+                let sc = tr.x + PAD + term.state.cursor_col as u16;
+                let sr = tr.y + term.state.cursor_row as u16;
+                write!(out, "\x1b[{};{}H\x1b[?25h\x1b[5 q", sr + 1, sc + 1)?;
+                out.flush()?;
+                return Ok(());
+            }
+        }
+        write!(out, "\x1b[?25l")?;
+        out.flush()?;
+        return Ok(());
+    }
+
     let screen_pos = app
         .editor_focused
         .then(|| {

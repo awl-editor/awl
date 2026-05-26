@@ -32,3 +32,5 @@ serde = { version = "1", features = ["derive"] }
 toml  = "0.8"
 tree-sitter-bash = "0.25"
 tree-sitter-yaml = "0.7.2"
+portable-pty = "0.8"
+vte = "0.13"

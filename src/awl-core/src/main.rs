@@ -12,6 +12,7 @@ mod app;
 mod breadcrumb;
 mod config;
 mod dialog_events;
+mod terminal;
 mod editor;
 mod event_loop;
 mod explorer;

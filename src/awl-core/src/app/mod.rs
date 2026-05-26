@@ -108,6 +108,12 @@ pub struct App {
     pub tab_scroll: usize,
     pub hovered_close: Option<usize>,
     pub dump_screen: bool,
+    pub terminal: Option<crate::terminal::TerminalPane>,
+    pub terminal_focused: bool,
+    pub terminal_height: u16,
+    pub terminal_sb_dragging: bool,
+    pub terminal_sb_drag_start_y: u16,
+    pub terminal_sb_drag_start_offset: usize,
 }
 
 impl App {
@@ -197,6 +203,12 @@ impl App {
             tab_scroll: 0,
             hovered_close: None,
             dump_screen: false,
+            terminal: None,
+            terminal_focused: false,
+            terminal_height: 12,
+            terminal_sb_dragging: false,
+            terminal_sb_drag_start_y: 0,
+            terminal_sb_drag_start_offset: 0,
         }
     }
 
