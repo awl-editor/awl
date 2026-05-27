@@ -151,9 +151,19 @@ pub fn run<W: Write>(
                     None
                 }
                 AppEvent::GitResult { git_root, git_branch, git_status } => {
+                    let first_load = app.git_root.is_none() && git_root.is_some();
                     app.git_root = git_root;
                     app.git_branch = git_branch;
                     app.git_status = git_status;
+                    if first_load {
+                        if let Some(ref root) = app.git_root {
+                            for tab in &app.tabs {
+                                if !tab.virtual_tab {
+                                    crate::git::spawn_file_diff_refresh(root.clone(), tab.path.clone(), app_tx.clone());
+                                }
+                            }
+                        }
+                    }
                     dirty = true;
                     is_motion = true;
                     None
@@ -164,9 +174,9 @@ pub fn run<W: Write>(
                     is_motion = true;
                     None
                 }
-                AppEvent::TerminalOutput(bytes) => {
-                    if let Some(term) = &mut app.terminal {
-                        term.process(&bytes);
+                AppEvent::TerminalOutput { id, data } => {
+                    if let Some(term) = app.terminals.iter_mut().find(|t| t.id == id) {
+                        term.process(&data);
                     }
                     dirty = true;
                     is_motion = true;
@@ -227,7 +237,7 @@ pub fn run<W: Write>(
                 if !consumed && app.terminal_focused {
                     if let Event::Key(ref key) = event {
                         if let Some(bytes) = key_to_pty(key) {
-                            if let Some(term) = &mut app.terminal {
+                            if let Some(term) = app.active_terminal_pane_mut() {
                                 term.state.scroll_offset = 0;
                                 term.write_input(&bytes);
                             }
@@ -236,11 +246,10 @@ pub fn run<W: Write>(
                     }
                 }
 
-                // terminal mouse events — consume all mouse events in the terminal area
-                if !consumed && app.terminal.is_some() && layout.terminal.height > 0 {
+                // terminal mouse events — consume all mouse events in the terminal/header area
+                if !consumed && !app.terminals.is_empty() && layout.terminal.height > 0 {
                     let tr = layout.terminal;
                     let th = layout.terminal_header;
-                    // termion mouse coords are 1-indexed; convert to 0-indexed
                     let mouse_xy = match &event {
                         Event::Mouse(MouseEvent::Press(_, mx, my)) => Some((mx.saturating_sub(1), my.saturating_sub(1))),
                         Event::Mouse(MouseEvent::Hold(mx, my)) => Some((mx.saturating_sub(1), my.saturating_sub(1))),
@@ -249,79 +258,134 @@ pub fn run<W: Write>(
                     };
                     if let Some((x, y)) = mouse_xy {
                         let in_term = y >= th.y && y < tr.y + tr.height && x >= th.x;
-                        let is_sb_drag_continue = app.terminal_sb_dragging && matches!(&event, Event::Mouse(MouseEvent::Hold(..) | MouseEvent::Release(..)));
-                        if in_term || is_sb_drag_continue {
+                        let is_drag_continue = (app.terminal_sb_dragging || app.terminal_resize_dragging)
+                            && matches!(&event, Event::Mouse(MouseEvent::Hold(..) | MouseEvent::Release(..)));
+                        if in_term || is_drag_continue {
                             let sb_x = tr.x + tr.width - 1;
+                            // Collect owned names to avoid borrowing app.terminals across mutations
+                            let term_names: Vec<String> = app.terminals.iter().map(|t| t.name.clone()).collect();
+                            let entries: Vec<(&str, bool)> = term_names.iter().map(|n| (n.as_str(), false)).collect();
+
                             match &event {
                                 Event::Mouse(MouseEvent::Press(MouseButton::WheelUp, _, _)) => {
-                                    if let Some(term) = &mut app.terminal {
+                                    let idx = app.active_terminal;
+                                    if let Some(term) = app.terminals.get_mut(idx) {
                                         term.state.scroll_offset = (term.state.scroll_offset + 3).min(term.state.scrollback.len());
                                     }
                                     app.terminal_sb_dragging = false;
                                 }
                                 Event::Mouse(MouseEvent::Press(MouseButton::WheelDown, _, _)) => {
-                                    if let Some(term) = &mut app.terminal {
+                                    let idx = app.active_terminal;
+                                    if let Some(term) = app.terminals.get_mut(idx) {
                                         term.state.scroll_offset = term.state.scroll_offset.saturating_sub(3);
                                     }
                                     app.terminal_sb_dragging = false;
                                 }
                                 Event::Mouse(MouseEvent::Press(MouseButton::Left, _, _)) => {
-                                    if (x == sb_x || (sb_x > 0 && x == sb_x - 1)) && y >= tr.y && y < tr.y + tr.height {
-                                        if let Some(term) = &mut app.terminal {
-                                            let scrollback_len = term.state.scrollback.len();
-                                            if scrollback_len > 0 {
-                                                let rows = tr.height as usize;
-                                                let total = scrollback_len + rows;
-                                                let h = ((rows * rows) / total).clamp(1, rows);
-                                                let max_top = rows.saturating_sub(h);
-                                                let scroll_from_top = scrollback_len.saturating_sub(term.state.scroll_offset);
-                                                let thumb_top = if max_top > 0 { (scroll_from_top * max_top) / scrollback_len } else { 0 };
-                                                let click_row = (y - tr.y) as usize;
-                                                let on_thumb = click_row >= thumb_top && click_row < thumb_top + h;
-                                                if on_thumb {
-                                                    app.terminal_sb_dragging = true;
-                                                    app.terminal_sb_drag_start_y = y;
-                                                    app.terminal_sb_drag_start_offset = term.state.scroll_offset;
-                                                } else if max_top > 0 {
-                                                    // jump: center thumb on click position
-                                                    let half = h / 2;
-                                                    let target_top = click_row.saturating_sub(half).min(max_top);
-                                                    let new_sft = target_top * scrollback_len / max_top;
-                                                    term.state.scroll_offset = scrollback_len.saturating_sub(new_sft);
-                                                    app.terminal_sb_dragging = true;
-                                                    app.terminal_sb_drag_start_y = y;
-                                                    app.terminal_sb_drag_start_offset = term.state.scroll_offset;
-                                                }
+                                    if y == th.y {
+                                        let close_hit = crate::tabs::view::simple_close_at(&entries, app.terminal_tab_scroll, th, x, y);
+                                        let new_tab_hit = crate::tabs::view::simple_new_tab_at(&entries, app.terminal_tab_scroll, th, x, y);
+                                        let tab_hit = crate::tabs::view::simple_tab_at(&entries, app.terminal_tab_scroll, th, x, y);
+                                        drop(entries);
+                                        if let Some(idx) = close_hit {
+                                            app.terminals.remove(idx);
+                                            if app.active_terminal >= app.terminals.len() && app.active_terminal > 0 {
+                                                app.active_terminal -= 1;
+                                            }
+                                            app.terminal_hovered_close = None;
+                                            if app.terminals.is_empty() {
+                                                app.terminal_focused = false;
+                                                app.editor_focused = true;
+                                            }
+                                        } else if new_tab_hit {
+                                            new_terminal_tab(app, &app_tx, w.into(), h.into());
+                                        } else if let Some(idx) = tab_hit {
+                                            app.active_terminal = idx;
+                                            app.terminal_focused = true;
+                                            app.editor_focused = false;
+                                        } else {
+                                            app.terminal_resize_dragging = true;
+                                            app.terminal_resize_drag_start_y = y;
+                                            app.terminal_resize_drag_start_height = app.terminal_height;
+                                        }
+                                        app.terminal_sb_dragging = false;
+                                    } else if (x == sb_x || (sb_x > 0 && x == sb_x - 1)) && y >= tr.y && y < tr.y + tr.height {
+                                        let idx = app.active_terminal;
+                                        let scrollback_len = app.terminals.get(idx).map(|t| t.state.scrollback.len()).unwrap_or(0);
+                                        if scrollback_len > 0 {
+                                            let rows = tr.height as usize;
+                                            let total = scrollback_len + rows;
+                                            let h_t = ((rows * rows) / total).clamp(1, rows);
+                                            let max_top = rows.saturating_sub(h_t);
+                                            let cur_offset = app.terminals[idx].state.scroll_offset;
+                                            let scroll_from_top = scrollback_len.saturating_sub(cur_offset);
+                                            let thumb_top = if max_top > 0 { (scroll_from_top * max_top) / scrollback_len } else { 0 };
+                                            let click_row = (y - tr.y) as usize;
+                                            let on_thumb = click_row >= thumb_top && click_row < thumb_top + h_t;
+                                            if on_thumb {
+                                                app.terminal_sb_dragging = true;
+                                                app.terminal_sb_drag_start_y = y;
+                                                app.terminal_sb_drag_start_offset = cur_offset;
+                                            } else if max_top > 0 {
+                                                let half = h_t / 2;
+                                                let target_top = click_row.saturating_sub(half).min(max_top);
+                                                let new_sft = target_top * scrollback_len / max_top;
+                                                app.terminals[idx].state.scroll_offset = scrollback_len.saturating_sub(new_sft);
+                                                app.terminal_sb_dragging = true;
+                                                app.terminal_sb_drag_start_y = y;
+                                                app.terminal_sb_drag_start_offset = app.terminals[idx].state.scroll_offset;
                                             }
                                         }
+                                        app.terminal_resize_dragging = false;
                                     } else {
                                         app.terminal_sb_dragging = false;
+                                        app.terminal_resize_dragging = false;
                                     }
                                 }
                                 Event::Mouse(MouseEvent::Hold(_, _)) => {
-                                    if app.terminal_sb_dragging {
-                                        if let Some(term) = &mut app.terminal {
-                                            let scrollback_len = term.state.scrollback.len();
-                                            if scrollback_len > 0 {
-                                                let rows = tr.height as usize;
-                                                let total = scrollback_len + rows;
-                                                let h = ((rows * rows) / total).clamp(1, rows);
-                                                let max_top = rows.saturating_sub(h);
-                                                if max_top > 0 {
-                                                    let initial_sft = scrollback_len.saturating_sub(app.terminal_sb_drag_start_offset);
-                                                    let dy = y as i32 - app.terminal_sb_drag_start_y as i32;
-                                                    let delta = dy * scrollback_len as i32 / max_top as i32;
-                                                    let new_sft = (initial_sft as i32 + delta).clamp(0, scrollback_len as i32) as usize;
-                                                    term.state.scroll_offset = scrollback_len - new_sft;
-                                                }
+                                    if app.terminal_resize_dragging {
+                                        let dy = app.terminal_resize_drag_start_y as i32 - y as i32;
+                                        let new_h = (app.terminal_resize_drag_start_height as i32 + dy).clamp(3, (h as i32 - 6).max(3)) as u16;
+                                        if new_h != app.terminal_height {
+                                            app.terminal_height = new_h;
+                                            let updated = Layout::compute_mode(w, h, app.explorer_width, app.minimal_mode, crate::render::app_panel_height(app));
+                                            let new_cols = (updated.terminal.width as usize).max(20);
+                                            let new_rows = (updated.terminal.height as usize).max(3);
+                                            for term in &mut app.terminals {
+                                                term.resize(new_cols, new_rows);
+                                            }
+                                        }
+                                    } else if app.terminal_sb_dragging {
+                                        let idx = app.active_terminal;
+                                        let scrollback_len = app.terminals.get(idx).map(|t| t.state.scrollback.len()).unwrap_or(0);
+                                        if scrollback_len > 0 {
+                                            let rows = tr.height as usize;
+                                            let total = scrollback_len + rows;
+                                            let h_t = ((rows * rows) / total).clamp(1, rows);
+                                            let max_top = rows.saturating_sub(h_t);
+                                            if max_top > 0 {
+                                                let start_offset = app.terminal_sb_drag_start_offset;
+                                                let start_y = app.terminal_sb_drag_start_y;
+                                                let initial_sft = scrollback_len.saturating_sub(start_offset);
+                                                let dy = y as i32 - start_y as i32;
+                                                let delta = dy * scrollback_len as i32 / max_top as i32;
+                                                let new_sft = (initial_sft as i32 + delta).clamp(0, scrollback_len as i32) as usize;
+                                                app.terminals[idx].state.scroll_offset = scrollback_len - new_sft;
                                             }
                                         }
                                     }
                                 }
                                 Event::Mouse(MouseEvent::Release(_, _)) => {
                                     app.terminal_sb_dragging = false;
+                                    app.terminal_resize_dragging = false;
                                 }
                                 _ => {}
+                            }
+                            // update hovered close button (re-create entries since they may have been dropped)
+                            {
+                                let term_names2: Vec<String> = app.terminals.iter().map(|t| t.name.clone()).collect();
+                                let entries2: Vec<(&str, bool)> = term_names2.iter().map(|n| (n.as_str(), false)).collect();
+                                app.terminal_hovered_close = crate::tabs::view::simple_close_at(&entries2, app.terminal_tab_scroll, th, x, y);
                             }
                             consumed = true;
                         }
@@ -425,13 +489,12 @@ pub fn run<W: Write>(
 
                 // mouse click focus switching between editor and terminal
                 if let Event::Mouse(MouseEvent::Press(MouseButton::Left, mx, my)) = event {
-                    // termion coords are 1-indexed; convert to 0-indexed
                     let x = mx.saturating_sub(1);
                     let y = my.saturating_sub(1);
                     let in_terminal = layout.terminal.height > 0
                         && x >= layout.terminal.x
                         && x < layout.terminal.x + layout.terminal.width
-                        && y >= layout.terminal_header.y
+                        && y > layout.terminal_header.y  // below header (not on tab bar)
                         && y < layout.terminal.y + layout.terminal.height;
                     let in_editor = x >= layout.editor.x
                         && x < layout.editor.x + layout.editor.width
@@ -652,25 +715,58 @@ fn process_fs_changes(app: &mut App) {
 }
 
 fn toggle_terminal(app: &mut App, tx: &mpsc::Sender<crate::app::events::AppEvent>, w: usize, h: usize) {
-    if app.terminal.is_some() {
-        app.terminal = None;
-        app.terminal_focused = false;
-        app.editor_focused = true;
+    if !app.terminals.is_empty() {
+        // toggle focus: if terminal has focus, give it to the editor; otherwise focus the terminal
+        if app.terminal_focused {
+            app.terminals.clear();
+            app.active_terminal = 0;
+            app.terminal_tab_scroll = 0;
+            app.terminal_focused = false;
+            app.editor_focused = true;
+        } else {
+            app.terminal_focused = true;
+            app.editor_focused = false;
+        }
     } else {
-        // Compute terminal dimensions as they'll be once the panel is open
+        // spawn the first terminal tab
         let panel_height = app.terminal_height + 1;
         let open_layout = ui::layout::Layout::compute_mode(w as u16, h as u16, app.explorer_width, app.minimal_mode, panel_height);
         let cols = (open_layout.terminal.width as usize).max(20);
         let rows = (open_layout.terminal.height as usize).max(3);
-        match crate::terminal::TerminalPane::spawn(cols, rows, &app.root, tx.clone()) {
+        let id = app.next_terminal_id;
+        app.next_terminal_id += 1;
+        match crate::terminal::TerminalPane::spawn(cols, rows, &app.root, tx.clone(), id) {
             Ok(pane) => {
-                app.terminal = Some(pane);
+                app.terminals.push(pane);
+                app.active_terminal = 0;
                 app.terminal_focused = true;
                 app.editor_focused = false;
             }
             Err(e) => {
+                app.next_terminal_id -= 1;
                 app.set_status(format!("terminal: {e}"), 4000, crate::app::StatusLevel::Error);
             }
+        }
+    }
+}
+
+fn new_terminal_tab(app: &mut App, tx: &mpsc::Sender<crate::app::events::AppEvent>, w: usize, h: usize) {
+    let panel_height = crate::render::app_panel_height(app);
+    let open_layout = ui::layout::Layout::compute_mode(w as u16, h as u16, app.explorer_width, app.minimal_mode, panel_height);
+    let cols = (open_layout.terminal.width as usize).max(20);
+    let rows = (open_layout.terminal.height as usize).max(3);
+    let id = app.next_terminal_id;
+    app.next_terminal_id += 1;
+    match crate::terminal::TerminalPane::spawn(cols, rows, &app.root, tx.clone(), id) {
+        Ok(pane) => {
+            app.terminals.push(pane);
+            app.active_terminal = app.terminals.len() - 1;
+            app.terminal_focused = true;
+            app.editor_focused = false;
+        }
+        Err(e) => {
+            app.next_terminal_id -= 1;
+            app.set_status(format!("terminal: {e}"), 4000, crate::app::StatusLevel::Error);
         }
     }
 }
@@ -720,6 +816,7 @@ fn write_pointer_shape<W: Write>(out: &mut W, shape: PointerShape) -> io::Result
         PointerShape::Text => write!(out, "\x1b]22;text\x07"),
         PointerShape::Pointer => write!(out, "\x1b]22;pointer\x07"),
         PointerShape::ColResize => write!(out, "\x1b]22;ew-resize\x07"),
+        PointerShape::RowResize => write!(out, "\x1b]22;ns-resize\x07"),
         PointerShape::Default => write!(out, "\x1b]22;\x07"),
     }
 }

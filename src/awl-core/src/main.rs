@@ -12,7 +12,6 @@ mod app;
 mod breadcrumb;
 mod config;
 mod dialog_events;
-mod terminal;
 mod editor;
 mod event_loop;
 mod explorer;
@@ -27,6 +26,7 @@ mod session;
 mod statusbar;
 mod swap;
 mod tabs;
+mod terminal;
 mod theme;
 
 use app::App;
@@ -70,6 +70,9 @@ fn main() -> io::Result<()> {
     out.flush()?;
 
     let (w, h) = termion::terminal_size()?;
+    let (app_tx, app_rx) = mpsc::channel::<AppEvent>();
+    let (hover_tx, hover_rx) = mpsc::channel::<HoverCmd>();
+
     let mut app = App::new(get_root_path());
 
     let file_arg = env::args().nth(1).map(PathBuf::from).filter(|p| p.is_file());
@@ -82,15 +85,21 @@ fn main() -> io::Result<()> {
 
     let mut renderer = Renderer::new(w, h);
     let mut tab_highlights: Vec<Option<highlight::Highlights>> = Vec::new();
-    update_highlights(&app, &mut tab_highlights);
+
     render::draw(renderer.buffer_mut(), &mut app, &tab_highlights, w, h);
     renderer.flush(&mut out)?;
+
     sync_cursor(&mut out, &app, w, h)?;
     render::set_terminal_title(&mut out, &render::terminal_title(&app)[..])?;
     out.flush()?;
 
-    let (app_tx, app_rx) = mpsc::channel::<AppEvent>();
-    let (hover_tx, hover_rx) = mpsc::channel::<HoverCmd>();
+    update_highlights(&app, &mut tab_highlights);
+    render::draw(renderer.buffer_mut(), &mut app, &tab_highlights, w, h);
+
+    renderer.flush(&mut out)?;
+    out.flush()?;
+
+    git::spawn_git_refresh(app.root.clone(), app_tx.clone());
 
     {
         let tx = app_tx.clone();

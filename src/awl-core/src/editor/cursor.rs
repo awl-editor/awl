@@ -10,6 +10,7 @@ pub enum PointerShape {
     Text,
     Pointer,
     ColResize,
+    RowResize,
 }
 
 pub fn pointer_shape_for(app: &App, mx: u16, my: u16, w: u16, h: u16) -> PointerShape {
@@ -100,17 +101,17 @@ pub fn pointer_shape_for(app: &App, mx: u16, my: u16, w: u16, h: u16) -> Pointer
         return PointerShape::Default;
     }
 
-    // Tab bar → Pointer (tabs are clickable; × is tracked separately for the red highlight).
+    // tab bar → pointer (tabs are clickable; × is tracked separately for the red highlight).
     if !app.minimal_mode && my == layout.tab_bar.y && mx >= layout.tab_bar.x && layout.tab_bar.width > 0 {
         return PointerShape::Pointer;
     }
 
-    // Breadcrumb row → Pointer.
+    // breadcrumb row → pointer
     if my == layout.breadcrumb.y && mx >= layout.breadcrumb.x && layout.breadcrumb.width > 0 {
         return PointerShape::Pointer;
     }
 
-    // Breadcrumb dropdown.
+    // breadcrumb dropdown
     if let Some(m) = &app.breadcrumb_menu {
         if m.screen_w > 0 {
             if mx >= m.screen_x && mx < m.screen_x + m.screen_w && my >= m.screen_y && my < m.screen_y + m.screen_h {
@@ -119,7 +120,21 @@ pub fn pointer_shape_for(app: &App, mx: u16, my: u16, w: u16, h: u16) -> Pointer
         }
     }
 
-    // Editor text area (past the line-number gutter).
+    // terminal header: Pointer over tabs/+ button, RowResize over empty space
+    if !app.terminals.is_empty() && my == layout.terminal_header.y && layout.terminal_header.height > 0 {
+        let th = layout.terminal_header;
+        let term_names: Vec<String> = app.terminals.iter().map(|t| t.name.clone()).collect();
+        let entries: Vec<(&str, bool)> = term_names.iter().map(|n| (n.as_str(), false)).collect();
+        if crate::tabs::view::simple_close_at(&entries, app.terminal_tab_scroll, th, mx, my).is_some()
+            || crate::tabs::view::simple_tab_at(&entries, app.terminal_tab_scroll, th, mx, my).is_some()
+            || crate::tabs::view::simple_new_tab_at(&entries, app.terminal_tab_scroll, th, mx, my)
+        {
+            return PointerShape::Pointer;
+        }
+        return PointerShape::RowResize;
+    }
+
+    // editor text area (past the line-number gutter).
     let text_x = layout.editor.x + gutter_width(app);
     let in_editor = mx >= text_x && my >= layout.editor.y && my < layout.editor.y + layout.editor.height && mx < layout.editor.x + layout.editor.width;
 
@@ -194,12 +209,10 @@ pub fn sync_cursor<W: Write>(out: &mut W, app: &App, w: u16, h: u16) -> io::Resu
     let layout = Layout::compute_mode(w, h, app.explorer_width, app.minimal_mode, crate::render::app_panel_height(app));
 
     if app.terminal_focused {
-        if let Some(term) = &app.terminal {
+        if let Some(term) = app.active_terminal_pane() {
             let tr = layout.terminal;
-            let visible = term.state.scroll_offset == 0
-                && tr.height > 0
-                && term.state.cursor_row < tr.height as usize
-                && term.state.cursor_col < tr.width.saturating_sub(2) as usize;
+            let visible =
+                term.state.scroll_offset == 0 && tr.height > 0 && term.state.cursor_row < tr.height as usize && term.state.cursor_col < tr.width.saturating_sub(2) as usize;
             if visible {
                 const PAD: u16 = 2;
                 let sc = tr.x + PAD + term.state.cursor_col as u16;

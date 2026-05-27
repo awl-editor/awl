@@ -108,18 +108,24 @@ pub struct App {
     pub tab_scroll: usize,
     pub hovered_close: Option<usize>,
     pub dump_screen: bool,
-    pub terminal: Option<crate::terminal::TerminalPane>,
+    pub terminals: Vec<crate::terminal::TerminalPane>,
+    pub active_terminal: usize,
+    pub terminal_tab_scroll: usize,
+    pub terminal_hovered_close: Option<usize>,
+    pub next_terminal_id: usize,
     pub terminal_focused: bool,
     pub terminal_height: u16,
     pub terminal_sb_dragging: bool,
     pub terminal_sb_drag_start_y: u16,
     pub terminal_sb_drag_start_offset: usize,
+    pub terminal_resize_dragging: bool,
+    pub terminal_resize_drag_start_y: u16,
+    pub terminal_resize_drag_start_height: u16,
 }
 
 impl App {
     pub fn new(root: PathBuf) -> Self {
         let tree = tree::load(&root);
-        let (git_root, git_branch, git_status) = git::load(&root);
         let lsp = LspManager::new(root.clone());
         Self {
             root,
@@ -132,9 +138,9 @@ impl App {
             last_click_time: None,
             last_click_pos: (0, 0),
             click_count: 0,
-            git_root,
-            git_branch,
-            git_status,
+            git_root: None,
+            git_branch: None,
+            git_status: HashMap::new(),
             editor_focused: false,
             root_expanded: true,
             explorer_width: 38,
@@ -203,13 +209,28 @@ impl App {
             tab_scroll: 0,
             hovered_close: None,
             dump_screen: false,
-            terminal: None,
+            terminals: Vec::new(),
+            active_terminal: 0,
+            terminal_tab_scroll: 0,
+            terminal_hovered_close: None,
+            next_terminal_id: 0,
             terminal_focused: false,
             terminal_height: 12,
             terminal_sb_dragging: false,
             terminal_sb_drag_start_y: 0,
             terminal_sb_drag_start_offset: 0,
+            terminal_resize_dragging: false,
+            terminal_resize_drag_start_y: 0,
+            terminal_resize_drag_start_height: 0,
         }
+    }
+
+    pub fn active_terminal_pane(&self) -> Option<&crate::terminal::TerminalPane> {
+        self.terminals.get(self.active_terminal)
+    }
+
+    pub fn active_terminal_pane_mut(&mut self) -> Option<&mut crate::terminal::TerminalPane> {
+        self.terminals.get_mut(self.active_terminal)
     }
 
     pub fn set_status(&mut self, msg: impl Into<String>, duration_ms: u64, level: StatusLevel) {

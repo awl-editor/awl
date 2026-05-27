@@ -33,6 +33,7 @@ pub struct TermState {
     pub cursor_col: usize,
     pub scrollback: Vec<Vec<TermCell>>,
     pub scroll_offset: usize,
+    pub pending_title: Option<String>,
     pen_fg: TermColor,
     pen_bg: TermColor,
     pen_bold: bool,
@@ -48,6 +49,7 @@ impl TermState {
             cursor_col: 0,
             scrollback: Vec::new(),
             scroll_offset: 0,
+            pending_title: None,
             pen_fg: TermColor::Default,
             pen_bg: TermColor::Default,
             pen_bold: false,
@@ -314,7 +316,12 @@ impl Perform for TermState {
 
     fn osc_dispatch(&mut self, params: &[&[u8]], _bell_terminated: bool) {
         if params.len() >= 2 && (params[0] == b"0" || params[0] == b"2") {
-            // title set — ignore for now
+            if let Ok(title) = std::str::from_utf8(params[1]) {
+                let title = title.trim().to_string();
+                if !title.is_empty() {
+                    self.pending_title = Some(title);
+                }
+            }
         }
     }
 
@@ -324,13 +331,16 @@ impl Perform for TermState {
 }
 
 pub struct TerminalPane {
+    pub id: usize,
+    pub name: String,
     pub state: TermState,
     writer: Box<dyn Write + Send>,
+    master: Box<dyn portable_pty::MasterPty>,
     parser: Parser,
 }
 
 impl TerminalPane {
-    pub fn spawn(cols: usize, rows: usize, cwd: &Path, tx: Sender<AppEvent>) -> io::Result<Self> {
+    pub fn spawn(cols: usize, rows: usize, cwd: &Path, tx: Sender<AppEvent>, id: usize) -> io::Result<Self> {
         let pty_system = NativePtySystem::default();
         let size = PtySize { rows: rows as u16, cols: cols as u16, pixel_width: 0, pixel_height: 0 };
         let pair = pty_system.openpty(size).map_err(|e| io::Error::new(io::ErrorKind::Other, e.to_string()))?;
@@ -346,6 +356,7 @@ impl TerminalPane {
 
         let mut reader = pair.master.try_clone_reader().map_err(|e| io::Error::new(io::ErrorKind::Other, e.to_string()))?;
         let writer = pair.master.take_writer().map_err(|e| io::Error::new(io::ErrorKind::Other, e.to_string()))?;
+        let master = pair.master;
 
         std::thread::spawn(move || {
             let mut buf = [0u8; 4096];
@@ -353,7 +364,7 @@ impl TerminalPane {
                 match reader.read(&mut buf) {
                     Ok(0) | Err(_) => break,
                     Ok(n) => {
-                        if tx.send(AppEvent::TerminalOutput(buf[..n].to_vec())).is_err() {
+                        if tx.send(AppEvent::TerminalOutput { id, data: buf[..n].to_vec() }).is_err() {
                             break;
                         }
                     }
@@ -361,18 +372,38 @@ impl TerminalPane {
             }
         });
 
-        Ok(Self { state: TermState::new(cols, rows), writer, parser: Parser::new() })
+        let name = format!("terminal {}", id + 1);
+        Ok(Self { id, name, state: TermState::new(cols, rows), writer, master, parser: Parser::new() })
+    }
+
+    pub fn resize(&mut self, cols: usize, rows: usize) {
+        let size = PtySize { rows: rows as u16, cols: cols as u16, pixel_width: 0, pixel_height: 0 };
+        let _ = self.master.resize(size);
+        self.state.resize(cols, rows);
     }
 
     pub fn process(&mut self, bytes: &[u8]) {
         for &b in bytes {
             self.parser.advance(&mut self.state, b);
         }
+        if let Some(title) = self.state.pending_title.take() {
+            self.name = truncate_tab_name(&title);
+        }
     }
 
     pub fn write_input(&mut self, bytes: &[u8]) {
         let _ = self.writer.write_all(bytes);
         let _ = self.writer.flush();
+    }
+}
+
+fn truncate_tab_name(s: &str) -> String {
+    const MAX: usize = 20;
+    let chars: Vec<char> = s.chars().collect();
+    if chars.len() <= MAX {
+        s.to_string()
+    } else {
+        chars[..MAX - 1].iter().collect::<String>() + "…"
     }
 }
 

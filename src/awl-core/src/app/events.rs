@@ -9,7 +9,7 @@ pub enum AppEvent {
     PreviewHighlights { path: std::path::PathBuf, highlights: Option<crate::highlight::Highlights> },
     GitResult { git_root: Option<PathBuf>, git_branch: Option<String>, git_status: HashMap<PathBuf, crate::git::Status> },
     FileDiffResult { path: PathBuf, diff: HashMap<usize, crate::git::DiffKind> },
-    TerminalOutput(Vec<u8>),
+    TerminalOutput { id: usize, data: Vec<u8> },
 }
 
 pub enum HoverCmd {

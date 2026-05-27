@@ -117,5 +117,5 @@ pub fn extract_card_selection(lines: &[popup::CardLine], anchor: (usize, usize),
 }
 
 pub fn app_panel_height(app: &App) -> u16 {
-    if app.terminal.is_some() { app.terminal_height + 1 } else { 0 }
+    if !app.terminals.is_empty() { app.terminal_height + 1 } else { 0 }
 }
